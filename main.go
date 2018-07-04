@@ -37,13 +37,13 @@ func clearBuffer(buff []byte) {
 }
 
 func updateCursorPosX(num int) {
-	if (myState.cursorPos.x + num) >= 0 {
+	if (myState.cursorPos.x + num) >= 1 {
 		myState.cursorPos.x += num
 	}
 }
 
 func updateCursorPosY(num int) {
-	if (myState.cursorPos.y + num) >= 0 {
+	if (myState.cursorPos.y + num) >= 1 {
 		myState.cursorPos.y += num
 	}
 }
@@ -51,19 +51,19 @@ func updateCursorPosY(num int) {
 func moveCursorX(num int, fn func(int)) {
 	line_length := myState.currentLine.length
 	// Current pos + the next column < the length of the line
-	if (myState.cursorPos.x + num) <= line_length {
+	if ((myState.cursorPos.x - 1) + num) <= line_length {
 		fn(int(math.Abs(float64(num)))) // Calls the easyterm func with a positive number
 		updateCursorPosX(num)
 	}
 }
-
+// TODO: Going from last line to first with text cant move cursor through the line
 func moveCursorY(num int, fn func(int)) {
 	buffer_length := sbGetBufferLength()
 	var (
 		currentLine *BufferNode
 		nextLine *BufferNode
 	)
-	if (myState.cursorPos.y + num) < (buffer_length - 1) {
+	if ((myState.cursorPos.y - 1) + num) < buffer_length {
 		currentLine = sbGetLine(myState.cursorPos.y)
 		//updateCursorPosY(num)
 		nextLine = sbGetLine(myState.cursorPos.y + num)
@@ -101,20 +101,20 @@ func backspaceLine() {
 	updateCursorPosX(-1)
 	//var tempPos := Cursor{myState.cursorPos.x, myState.cursorPos.y}
 	lineRune := []rune(myState.currentLine.line) // Current text in the line
-	if myState.cursorPos.x > 0 {
+	if myState.cursorPos.x > 1 {
 		myState.currentLine.line = string(lineRune[0:myState.cursorPos.x]) + string(lineRune[(myState.cursorPos.x + 1):myState.currentLine.length])
 		myState.currentLine.length = len(myState.currentLine.line)
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		fmt.Print(myState.currentLine.line) // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
-	} else if myState.cursorPos.x == 0{
+	} else if myState.cursorPos.x == 1 {
 		myState.currentLine.line = string(lineRune[1:len(myState.currentLine.line)])
 		myState.currentLine.length = len(myState.currentLine.line)
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
-		fmt.Print(myState.currentLine.line) // write updated line again	
+		fmt.Print(myState.currentLine.line) // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 	}
 }
@@ -123,11 +123,11 @@ func main() {
 	/* Terminal in raw mode */
 	easyterm.Init()
 	easyterm.Clear()
-	easyterm.CursorPos(0,0)
+	easyterm.CursorPos(1,1)
 
 	/* Init my position */
-	myState.cursorPos = Cursor{0,0}
-	
+	myState.cursorPos = Cursor{1,1}
+
 	/* Reader and Writer to standard in & out */
 	termRW = bufio.NewReadWriter(bufio.NewReader(os.Stdin), bufio.NewWriter(os.Stdout))
 
@@ -145,12 +145,11 @@ func main() {
 	sbInitNewFile()
 	sbPrintBuffer()
 	/* Get first line node to have something to write to */
-	myState.currentLine = sbGetLine(0)
+	myState.currentLine = sbGetLine(1)
 
 	for {
 		if bytesRead, err := termRW.Reader.Read(buffer); err == nil {
 			//fmt.Printf("%s", string(letter))
-			
 			/* Means that the arrow keys where pressed */
 			/* This will send 3 bytes: Esc, [ and (A or B or C or D)  */
 			if bytesRead > 1 {
@@ -169,18 +168,18 @@ func main() {
 						moveCursorY(-1, easyterm.CursorUp)
 						//easyterm.CursorUp(1)
 						//updateCursorPosY(1)
-	
+
 					case 67:
 						// Right arrow
 						moveCursorX(1, easyterm.CursorRight)
 						//easyterm.CursorRight(1)
 						//updateCursorPosX(1)
-	
+
 					case 66:
 						// Down arrow
 						moveCursorY(1, easyterm.CursorDown)
 						//easyterm.CursorDown(1)
-						//updateCursorPosY(-1)		
+						//updateCursorPosY(-1)
 
 					}
 					clearBuffer(buffer)
@@ -198,8 +197,12 @@ func main() {
 						//updateCursorPosY(1)
 						sbAddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
 						updateCursorPosY(1)
-						easyterm.CursorPos(myState.cursorPos.y, 0)
+						easyterm.CursorPos(myState.cursorPos.y, 1)
 						myState.currentLine = sbGetLine(myState.cursorPos.y)
+						//fmt.Println(sbGetBufferLength())
+						//myState.currentLine = sbGetLine(myState.cursorPos.y)
+						//easyterm.CursorPos(myState.cursorPos.y, 1)
+						//myState.currentLine = sbGetLine(myState.cursorPos.y)
 						//fmt.Print(myState.cursorPos.x)
 						//fmt.Print(myState.cursorPos.y)
 					case letter == 127:
@@ -215,14 +218,14 @@ func main() {
 						// Save
 
 					case letter == 17:
-						// Ctrl-Q		
+						// Ctrl-Q
 						easyterm.Clear()
-						easyterm.CursorPos(0,0)
+						easyterm.CursorPos(1,1)
 						easyterm.End()
 						return
 					case letter > 0 && letter <= 31:
 						// Do nothing
-	
+
 					default:
 						//fmt.Print(letter)
 						///fmt.Printf("BytesRead: %d\n", bytesRead)
@@ -235,7 +238,7 @@ func main() {
 
 		} else {
 			easyterm.Clear()
-			easyterm.CursorPos(0,0)
+			easyterm.CursorPos(1,1)
 			easyterm.End()
 			return
 		}

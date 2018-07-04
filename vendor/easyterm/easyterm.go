@@ -62,7 +62,7 @@ func CursorPos(y, x int) {
 	fmt.Print("\033["+ strconv.Itoa(y) + ";" + strconv.Itoa(x) + "H")
 }
 
-func Clear() {	
+func Clear() {
 	fmt.Print("\033[2J")
 }
 
