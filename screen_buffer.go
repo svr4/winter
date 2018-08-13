@@ -43,7 +43,7 @@ func sbInitNewFile() {
 	// Insert the first line in new file
 	var temp = &BufferNode{}
 	temp.index = 1
-	temp.line = "cock"
+	temp.line = "test"
 	temp.length = 4
 	temp.prev = nil
 	temp.next = nil
@@ -130,6 +130,15 @@ func sbUpdateBufferIndexes() {
 	}
 }
 
+func sbPrintLine(line int) {
+	for traveler := buffer.head; traveler != nil; traveler = traveler.next {
+		if traveler.index == line {
+			fmt.Print(traveler.line)
+			break
+		}
+	}
+}
+
 func sbGetLine(line int) *BufferNode {
 	var lineNode *BufferNode
 	for traveler := buffer.head; traveler != nil; traveler = traveler.next {
@@ -167,6 +176,15 @@ func sbReprintBuffer() {
 		//fmt.Printf("%d\n", traveler.index)
 		i++
 	}
+
+	for x:= i; x < DEFAULT_HEIGHT; x++ {
+		easyterm.CursorPos(i,1)
+		easyterm.ClearLine()
+		easyterm.CursorPos(i,1)
+		fmt.Printf("~\n")
+		easyterm.CursorPos(x,1)
+	}
+
 }
 // TODO: spliting a line and pressing enter again and again not moving split line down
 func sbAddLineToBuffer(line, column int) {
@@ -227,7 +245,7 @@ func sbAddLineToBuffer(line, column int) {
 					// New original lines text
 					origRune := make([]rune, len(origText[0:(column - 1)]))
 					// Copying original lines new text to rune
-					copy(origRune, origText[0:column])
+					copy(origRune, origText[0:column - 1])
 					// slice with new line text
 					newRune := origText[(column - 1):traveler.length]
 					newText := make([]rune, len(newRune))
@@ -243,7 +261,7 @@ func sbAddLineToBuffer(line, column int) {
 					/*traveler.line = string(origText[0:column])
 					traveler.length = len(traveler.line)*/
 			}
-			
+
 			sbUpdateBufferIndexes()
 			sbReprintBuffer()
 			//easyterm.CursorPos(line,column)
