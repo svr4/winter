@@ -37,24 +37,30 @@ func clearBuffer(buff []byte) {
 }
 
 func updateCursorPosX(num int) {
-	if (myState.cursorPos.x + num) >= 0 {
+	if (myState.cursorPos.x + num) > 0 {
 		myState.cursorPos.x += num
 	}
 }
 
 func updateCursorPosY(num int) {
-	if (myState.cursorPos.y + num) >= 0 {
+	if (myState.cursorPos.y + num) > 0 {
 		myState.cursorPos.y += num
 	}
+}
+
+func setCursorPos(y, x int) {
+	myState.cursorPos.x = x
+	myState.cursorPos.y = y
 }
 
 func moveCursorX(num int, fn func(int)) {
 	line_length := myState.currentLine.length
 	// Current pos + the next column < the length of the line
-	if (myState.cursorPos.x + num) <= line_length {
+	if ((myState.cursorPos.x - 1) + num) <= line_length {
 		fn(int(math.Abs(float64(num)))) // Calls the easyterm func with a positive number
 		updateCursorPosX(num)
 	}
+	showEditorData()
 }
 
 func moveCursorY(num int, fn func(int)) {
@@ -63,7 +69,7 @@ func moveCursorY(num int, fn func(int)) {
 		currentLine *BufferNode
 		nextLine *BufferNode
 	)
-	if (myState.cursorPos.y + num) < (buffer_length - 1) {
+	if ((myState.cursorPos.y - 1) + num) < buffer_length {
 		currentLine = sbGetLine(myState.cursorPos.y)
 		//updateCursorPosY(num)
 		nextLine = sbGetLine(myState.cursorPos.y + num)
@@ -78,56 +84,186 @@ func moveCursorY(num int, fn func(int)) {
 		if nextLine.length < currentLine.length {
 			//easyterm.CursorPos(0,1)
 			easyterm.CursorPos(myState.cursorPos.y, nextLine.length)
+			setCursorPos(myState.cursorPos.y, nextLine.length + 1)
 		}
 
 		myState.currentLine = nextLine
+		showEditorData()
 	}
 }
 
+func showEditorData() {
+	easyterm.CursorPos(40, 1)
+	fmt.Printf("Current Line Index: %v", myState.currentLine.index)
+	fmt.Print("\n")
+	easyterm.CursorPos(41, 1)
+	fmt.Print("Position:")
+	fmt.Print("\n")
+	easyterm.CursorPos(42, 1)
+	fmt.Printf("X: %v Y: %v", myState.cursorPos.x, myState.cursorPos.y)
+	fmt.Print("\n")
+	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+}
+
 func writeTextToBuffer(letter byte) {
-	myState.currentLine.line += string(letter)
+
+	switch {
+	// begining
+	case myState.cursorPos.x == 1:
+		myState.currentLine.line = string(letter) + myState.currentLine.line
+	// end
+	case myState.cursorPos.x == (myState.currentLine.length + 1):
+		myState.currentLine.line += string(letter)
+	// middle
+	case myState.cursorPos.x < (myState.currentLine.length + 1):
+		total := make([]rune, myState.currentLine.length + 1)
+		firstHalf := make([]rune, len(myState.currentLine.line[0:myState.cursorPos.x - 1]))
+		copy(firstHalf, []rune(myState.currentLine.line[0:myState.cursorPos.x - 1]))
+		secondHalf := make([]rune, len(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+		copy(secondHalf, []rune(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+
+		copy(total, []rune(string(firstHalf) + string(letter) + string(secondHalf)))
+		myState.currentLine.line = string(total)
+	}
+	easyterm.ClearLine()
+	easyterm.CursorPos(myState.cursorPos.y, 1)
+	fmt.Print(myState.currentLine.line)
+	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
 	myState.currentLine.length = len(myState.currentLine.line)
 }
 
 func backspaceLine() {
 
 	if myState.currentLine.length == 0 {
+		// delete node, rehook list ends and move cursor to end of previous line
+		var (
+			prev *BufferNode
+			next *BufferNode
+		)
+		prev = myState.currentLine.prev
+		next = myState.currentLine.next
+
+		if prev != nil {
+			prev.next = next
+		} else {
+			return
+		}
+
+		if next != nil {
+			next.prev = prev
+		}
+
+		myState.currentLine.prev = nil
+		myState.currentLine.next = nil
+
+		myState.currentLine = prev
+
+		updateCursorPosY(-1) // move up one line in state
+		sbUpdateBufferIndexes()
+		sbReprintBuffer() // reprints complete buffer
+		easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.length + 1)
+		setCursorPos(myState.cursorPos.y, myState.currentLine.length + 1)
+		showEditorData()
 		return
 	}
 
-	// TODO: move line up if length == 0
 
-	easyterm.CursorLeft(1)
-	updateCursorPosX(-1)
-	//var tempPos := Cursor{myState.cursorPos.x, myState.cursorPos.y}
-	lineRune := []rune(myState.currentLine.line) // Current text in the line
-	if myState.cursorPos.x > 0 {
-		myState.currentLine.line = string(lineRune[0:myState.cursorPos.x]) + string(lineRune[(myState.cursorPos.x + 1):myState.currentLine.length])
-		myState.currentLine.length = len(myState.currentLine.line)
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
+	// TODO: single line wrapping handling
+
+	switch {
+		// Between the first and last characters of a line
+	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.length + 1):
+
+		total := make([]rune, myState.currentLine.length - 1)
+		firstHalf := make([]rune, len(myState.currentLine.line[0:myState.cursorPos.x-2]))
+		copy(firstHalf, []rune(myState.currentLine.line[0:myState.cursorPos.x-2]))
+		secondHalf := make([]rune, len(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+		copy(secondHalf, []rune(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+
+		copy(total, []rune(string(firstHalf) + string(secondHalf)))
+		myState.currentLine.line = string(total)
+		myState.currentLine.length = len(total)
+
+		// reprint line
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		fmt.Print(myState.currentLine.line) // write updated line again
-		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
-	} else if myState.cursorPos.x == 0{
-		myState.currentLine.line = string(lineRune[1:len(myState.currentLine.line)])
-		myState.currentLine.length = len(myState.currentLine.line)
-		easyterm.CursorPos(myState.cursorPos.y, 0) // move cursor to start
-		easyterm.ClearLine()
-		fmt.Print(myState.currentLine.line) // write updated line again	
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+		// move & update cursor
+		easyterm.CursorLeft(1)
+		updateCursorPosX(-1)
+
+	case myState.cursorPos.x == 1:
+
+		// check if we have line on top, if not do nothing, else move it up
+		var prev *BufferNode
+		prev = myState.currentLine.prev
+		if prev != nil {
+			// move current line up
+			origPrevLineLength := prev.length // to move the cursor later
+			currentText := make([]rune, myState.currentLine.length)
+			copy(currentText, []rune(myState.currentLine.line))
+			prev.line += string(currentText)
+			prev.length = len(prev.line)
+
+			// rehook list, sans the soon to be destroyed node and update currentLine state
+			var next *BufferNode
+			next = myState.currentLine.next
+			if next != nil {
+				prev.next = next
+				next.prev = prev
+				myState.currentLine.prev = nil
+				myState.currentLine.next = nil
+			} else {
+				prev.next = nil
+				myState.currentLine.prev = nil
+			}
+
+			myState.currentLine = prev
+			updateCursorPosY(-1) // move up one line in state
+			/*easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start of new line
+			easyterm.ClearLine()
+			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+			fmt.Print(myState.currentLine.line) // write updated line again*/
+			sbUpdateBufferIndexes()
+			sbReprintBuffer() // reprints complete buffer
+			easyterm.CursorPos(myState.cursorPos.y, origPrevLineLength+1)
+			setCursorPos(myState.cursorPos.y, origPrevLineLength + 1)
+			//easyterm.CursorPos(20, 1)
+			//fmt.Print(sbGetBufferLength())
+
+		}
+
+	case myState.cursorPos.x == (myState.currentLine.length + 1):
+
+		newLine := make([]rune, myState.currentLine.length-1)
+		copy(newLine, []rune(myState.currentLine.line[0:myState.currentLine.length-1]))
+		myState.currentLine.line = string(newLine)
+		myState.currentLine.length = len(myState.currentLine.line)
+
+		// reprint line
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+		easyterm.ClearLine()
+		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+		fmt.Print(myState.currentLine.line) // write updated line again
+		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+		// move & update cursor
+		easyterm.CursorLeft(1)
+		updateCursorPosX(-1)
 	}
+	showEditorData()
 }
 
 func main() {
 	/* Terminal in raw mode */
 	easyterm.Init()
 	easyterm.Clear()
-	easyterm.CursorPos(0,0)
+	easyterm.CursorPos(1,1)
 
 	/* Init my position */
-	myState.cursorPos = Cursor{0,0}
-	
+	myState.cursorPos = Cursor{1,1}
+
 	/* Reader and Writer to standard in & out */
 	termRW = bufio.NewReadWriter(bufio.NewReader(os.Stdin), bufio.NewWriter(os.Stdout))
 
@@ -145,12 +281,12 @@ func main() {
 	sbInitNewFile()
 	sbPrintBuffer()
 	/* Get first line node to have something to write to */
-	myState.currentLine = sbGetLine(0)
+	myState.currentLine = sbGetLine(1)
+	showEditorData()
 
 	for {
 		if bytesRead, err := termRW.Reader.Read(buffer); err == nil {
 			//fmt.Printf("%s", string(letter))
-			
 			/* Means that the arrow keys where pressed */
 			/* This will send 3 bytes: Esc, [ and (A or B or C or D)  */
 			if bytesRead > 1 {
@@ -169,18 +305,18 @@ func main() {
 						moveCursorY(-1, easyterm.CursorUp)
 						//easyterm.CursorUp(1)
 						//updateCursorPosY(1)
-	
+
 					case 67:
 						// Right arrow
 						moveCursorX(1, easyterm.CursorRight)
 						//easyterm.CursorRight(1)
 						//updateCursorPosX(1)
-	
+
 					case 66:
 						// Down arrow
 						moveCursorY(1, easyterm.CursorDown)
 						//easyterm.CursorDown(1)
-						//updateCursorPosY(-1)		
+						//updateCursorPosY(-1)
 
 					}
 					clearBuffer(buffer)
@@ -193,13 +329,18 @@ func main() {
 				switch {
 					case letter == 13:
 						// Enter
-						// TODO: Insert new line in list
 						//easyterm.CursorNextLine(1)
 						//updateCursorPosY(1)
 						sbAddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
 						updateCursorPosY(1)
-						easyterm.CursorPos(myState.cursorPos.y, 0)
+						easyterm.CursorPos(myState.cursorPos.y, 1)
+						setCursorPos(myState.cursorPos.y, 1)
 						myState.currentLine = sbGetLine(myState.cursorPos.y)
+						showEditorData()
+						//fmt.Println(sbGetBufferLength())
+						//myState.currentLine = sbGetLine(myState.cursorPos.y)
+						//easyterm.CursorPos(myState.cursorPos.y, 1)
+						//myState.currentLine = sbGetLine(myState.cursorPos.y)
 						//fmt.Print(myState.cursorPos.x)
 						//fmt.Print(myState.cursorPos.y)
 					case letter == 127:
@@ -215,27 +356,28 @@ func main() {
 						// Save
 
 					case letter == 17:
-						// Ctrl-Q		
+						// Ctrl-Q
 						easyterm.Clear()
-						easyterm.CursorPos(0,0)
+						easyterm.CursorPos(1,1)
 						easyterm.End()
 						return
 					case letter > 0 && letter <= 31:
 						// Do nothing
-	
+
 					default:
 						//fmt.Print(letter)
 						///fmt.Printf("BytesRead: %d\n", bytesRead)
-						fmt.Printf("%s", string(letter))
-						updateCursorPosX(1)
+						//fmt.Printf("%s", string(letter))
+						//updateCursorPosX(1)
 						writeTextToBuffer(letter)
+						updateCursorPosX(1)
 				}
 
 			}
 
 		} else {
 			easyterm.Clear()
-			easyterm.CursorPos(0,0)
+			easyterm.CursorPos(1,1)
 			easyterm.End()
 			return
 		}
