@@ -6,10 +6,12 @@ import (
 	"os"
 	"fmt"
 	"math"
+	"log"
 	//"strings"
 )
 /* Alias ReadWriter */
 type ReadWriter = bufio.ReadWriter
+type File = os.File
 
 
 type Cursor struct {
@@ -21,6 +23,8 @@ type Cursor struct {
 type WinterState struct {
 	cursorPos Cursor
 	currentLine *BufferNode
+	fileName string
+	filePtr *File
 }
 
 /* Global State */
@@ -93,15 +97,16 @@ func moveCursorY(num int, fn func(int)) {
 }
 
 func showEditorData() {
-	easyterm.CursorPos(40, 1)
+	pos := 40
+	pos2 := 80
+	easyterm.CursorPos(pos, pos2)
 	fmt.Printf("Current Line Index: %v", myState.currentLine.index)
-	fmt.Print("\n")
-	easyterm.CursorPos(41, 1)
+	easyterm.CursorPos(pos+1, pos2)
+	fmt.Printf("Buffer Length: %v", sbGetBufferLength())
+	easyterm.CursorPos(pos+2, pos2)
 	fmt.Print("Position:")
-	fmt.Print("\n")
-	easyterm.CursorPos(42, 1)
+	easyterm.CursorPos(pos+3, pos2)
 	fmt.Printf("X: %v Y: %v", myState.cursorPos.x, myState.cursorPos.y)
-	fmt.Print("\n")
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -254,6 +259,31 @@ func backspaceLine() {
 	}
 	showEditorData()
 }
+// TODO: When the file is new or temp, don't actually create the file until it's saved by user
+func handleArguments(args []string) {
+
+	switch len(args) {
+
+	case 1:
+		// new file with no name, when saved do it with random name
+		myState.fileName = "winterTemp"
+		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
+			myState.filePtr = file
+		} else {
+			log.Fatal(err)
+		}
+	case 2:
+		myState.fileName = os.Args[1]
+		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
+			// Found the file, lets load it after
+			myState.filePtr = file
+
+		} else {
+			// Something happened, throw error
+			log.Fatal(err)
+		}
+	}
+}
 
 func main() {
 	/* Terminal in raw mode */
@@ -275,10 +305,10 @@ func main() {
 	/* Init those vars */
 	buffer = make([]byte, 4) // Length of an int var
 
-	/* TODO:  Parameter handling for either loading a file or creating a new one */
-	/* DOING: Working on new file scenario */
+	// Handles file name, myState.filePtr should have been set
+	handleArguments(os.Args)
 
-	sbInitNewFile()
+	sbLoadFile(myState.filePtr)
 	sbPrintBuffer()
 	/* Get first line node to have something to write to */
 	myState.currentLine = sbGetLine(1)

@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"easyterm"
+	"bufio"
+	"io"
+	"bytes"
 	//"strconv"
 )
-
+type Buffer = bytes.Buffer
 var DEFAULT_HEIGHT, DEFAULT_WIDTH = 25, 80
 // Consts represent what to do with the
 // content when the user presses enter on a line
@@ -33,48 +36,87 @@ type ScreenBuffer struct {
 var buffer ScreenBuffer
 
 
-func sbInitNewFile() {
-	//var traveler = &BufferNode{}
-	//buffer.length = 0;
-	/*if w, h, err := easyterm.GetSize(); err == nil {
+func sbLoadFile(file *File) {
+	// init buffer length
+	buffer.length = 0;
+	// get current window dimensions
+	if w, h, err := easyterm.GetSize(); err == nil {
 		DEFAULT_HEIGHT = h
 		DEFAULT_WIDTH = w
-	}*/
-	// Insert the first line in new file
+	}
+	// read/writer for the file
+	fileRW := bufio.NewReadWriter(bufio.NewReader(file), bufio.NewWriter(file))
 	var temp = &BufferNode{}
-	temp.index = 1
-	temp.line = "test"
-	temp.length = 4
-	temp.prev = nil
-	temp.next = nil
-	buffer.head = temp
-	buffer.length = 1;
-
-	/*for i := 0; i < DEFAULT_HEIGHT; i++ {
-		var temp = &BufferNode{}
-		temp.index = i
-		temp.line = "~"
-		temp.length = 1
-		if i == 0 {
+	var traveler = &BufferNode{}
+	for i := 1; i < DEFAULT_HEIGHT; i ++ {
+		lineBytes, err := sbReadLine(fileRW);
+		//fmt.Print(string(lineBytes))
+		// already at the end
+		if err == io.EOF && buffer.length == 0 {
+			temp.index = i
+			temp.line = ""
+			temp.length = len(temp.line)
 			temp.prev = nil
 			temp.next = nil
 			buffer.head = temp
-			traveler = buffer.head
-		} else {
-			traveler.next = temp
-			temp.prev = traveler
-			temp.next = nil
-			traveler = temp
+			buffer.length++;
+			break
 		}
-		buffer.length += 1
-	}*/
+		// Not at EOF
+		if err == nil {
+			if i == 1 {
+				temp.index = i
+				temp.line = string(lineBytes)
+				temp.length = len(temp.line)
+				temp.prev = nil
+				temp.next = nil
+				buffer.head = temp
+				buffer.length++;
+				traveler = buffer.head
+			} else {
+				temp = &BufferNode{}
+				temp.index = i
+				temp.line = string(lineBytes)
+				temp.length = len(temp.line)
+				temp.prev = traveler
+				temp.next = nil
+
+				traveler.next = temp
+				traveler = traveler.next
+				buffer.length++
+			}
+		}
+	}
 
 }
 
-/*func sbInitExistingFile(fileName string) {
+func sbReadLine(fileRW *ReadWriter) ([]byte, error) {
 
+	lineBytes, isPrefix, err := fileRW.ReadLine()
+	if err == nil {
 
-}*/
+		if isPrefix {
+			var buffer Buffer
+			buffer.Write(lineBytes)
+			for isPrefix {
+				lineBytes, isPrefix, err = fileRW.ReadLine()
+				if err == nil {
+						buffer.Write(lineBytes)
+				}
+			}
+			copyOfBuffer := make([]byte, buffer.Len())
+			copy(copyOfBuffer, buffer.Bytes())
+			return copyOfBuffer, nil
+		} else {
+			return lineBytes, nil
+		}
+
+	} else {
+		return make([]byte, 0), err
+	}
+
+}
+
 
 func sbPrintBuffer() {
 	if w, h, err := easyterm.GetSize(); err == nil {
@@ -186,7 +228,7 @@ func sbReprintBuffer() {
 	}
 
 }
-// TODO: spliting a line and pressing enter again and again not moving split line down
+
 func sbAddLineToBuffer(line, column int) {
 
 	for traveler := buffer.head; traveler != nil; traveler = traveler.next {
