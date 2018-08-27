@@ -6,9 +6,11 @@ import (
 	"bufio"
 	"io"
 	"bytes"
+	"os"
 	//"strconv"
 )
 type Buffer = bytes.Buffer
+type File = os.File
 var DEFAULT_HEIGHT, DEFAULT_WIDTH = 25, 80
 // Consts represent what to do with the
 // content when the user presses enter on a line
@@ -30,6 +32,10 @@ type BufferNode struct {
 type ScreenBuffer struct {
 	head *BufferNode
 	length int
+	maxLength int
+	filePtrIndex int64
+	filePtr *File
+	fileRW *ReadWriter
 }
 
 /* The buffer */
@@ -39,17 +45,22 @@ var buffer ScreenBuffer
 func sbLoadFile(file *File) {
 	// init buffer length
 	buffer.length = 0;
+	buffer.filePtrIndex = -1
+	buffer.filePtr = file
 	// get current window dimensions
 	if w, h, err := easyterm.GetSize(); err == nil {
 		DEFAULT_HEIGHT = h
 		DEFAULT_WIDTH = w
+		buffer.maxLength = h // set the max length of list to screen height
+	} else {
+		buffer.maxLength = DEFAULT_HEIGHT
 	}
 	// read/writer for the file
-	fileRW := bufio.NewReadWriter(bufio.NewReader(file), bufio.NewWriter(file))
+	buffer.fileRW = bufio.NewReadWriter(bufio.NewReader(file), bufio.NewWriter(file))
 	var temp = &BufferNode{}
 	var traveler = &BufferNode{}
 	for i := 1; i < DEFAULT_HEIGHT; i ++ {
-		lineBytes, err := sbReadLine(fileRW);
+		lineBytes, err := sbReadLine(buffer.fileRW);
 		//fmt.Print(string(lineBytes))
 		// already at the end
 		if err == io.EOF && buffer.length == 0 {
@@ -60,6 +71,7 @@ func sbLoadFile(file *File) {
 			temp.next = nil
 			buffer.head = temp
 			buffer.length++;
+			buffer.filePtrIndex++
 			break
 		}
 		// Not at EOF
@@ -73,6 +85,7 @@ func sbLoadFile(file *File) {
 				buffer.head = temp
 				buffer.length++;
 				traveler = buffer.head
+				buffer.filePtrIndex++
 			} else {
 				temp = &BufferNode{}
 				temp.index = i
@@ -84,6 +97,7 @@ func sbLoadFile(file *File) {
 				traveler.next = temp
 				traveler = traveler.next
 				buffer.length++
+				buffer.filePtrIndex++
 			}
 		}
 	}
@@ -117,6 +131,48 @@ func sbReadLine(fileRW *ReadWriter) ([]byte, error) {
 
 }
 
+func sbEnqueueLine(line []byte, where int) {
+	// add line via reading or add line via enter
+	traveler := sbGetLine(buffer.length)
+	switch where {
+	case UP:
+
+	case DOWN:
+		buffer.length++
+		var temp = &BufferNode{}
+		temp.index = buffer.length
+		temp.line = string(line)
+		temp.length = len(temp.line)
+		temp.prev = traveler
+		temp.next = nil
+
+		if traveler.next == nil {
+			traveler.next = temp
+		}
+	}
+}
+
+func sbDequeueLine() {
+
+}
+
+func sbLoadLine(fromWhere int) {
+	switch fromWhere {
+	case UP:
+
+	case DOWN:
+		newPtrIndex, err := buffer.filePtr.Seek(buffer.filePtrIndex+1, 0)
+		if err == nil {
+			buffer.filePtrIndex = newPtrIndex
+			lineBytes, err2 := sbReadLine(buffer.fileRW)
+			if err2 == nil {
+				// We got a line, lets put it on the screen
+				sbEnqueueLine(lineBytes, DOWN)
+				sbPrintBuffer()
+			}
+		}
+	}
+}
 
 func sbPrintBuffer() {
 	if w, h, err := easyterm.GetSize(); err == nil {
@@ -153,6 +209,10 @@ func sbGetLineLength(line int) int {
 		}
 	}
 	return i
+}
+
+func sbGetFilePtrIndex() int64 {
+	return buffer.filePtrIndex
 }
 
 func sbGetBufferLength() int {
@@ -239,7 +299,7 @@ func sbAddLineToBuffer(line, column int) {
 			temp.length = 0
 			// col - 1 because screen is 1 based and strings are 0 based
 			//fmt.Printf("%v\n", temp.prev)
-			var insertWhere = sbManageNewLineString(column, buffer.head.length)
+			var insertWhere = sbManageNewLineString(column, traveler.length)
 			//fmt.Printf("%d\n",insertWhere)
 			switch insertWhere {
 				case UP:

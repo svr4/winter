@@ -3,31 +3,57 @@ package easyterm
 
 import (
 	"golang.org/x/crypto/ssh/terminal"
+	"github.com/pkg/term/termios"
+	"syscall"
 	"fmt"
 	"strconv"
 	"os"
 )
 /* Alias for type  */
-type State = terminal.State
+type Termios = syscall.Termios
+//type State = terminal.State
 
 /* Global State */
 var (
-	terminalState *State
+	terminalState = &Termios{}
+	//terminalState *State
 	err error
 )
 
 
 func Init() {
 	/* Put terminal in raw mode */
-	terminalState, err = terminal.MakeRaw(0)
+	err := termios.Tcgetattr(uintptr(syscall.Stdin), terminalState)
 	if err != nil {
 		panic(err)
 	}
 
+	// IT'S A STRUCT!
+	var tempState = &Termios{}
+	*tempState = *terminalState
+
+	tempState.Iflag &^= (syscall.IGNBRK | syscall.PARMRK | syscall.INLCR | syscall.IGNCR | syscall.BRKINT | syscall.ICRNL | syscall.INPCK | syscall.ISTRIP | syscall.IXON)
+	tempState.Oflag &^= syscall.OPOST
+	tempState.Cflag &^= (syscall.CSIZE | syscall.PARENB)
+	tempState.Cflag |= syscall.CS8
+	tempState.Lflag &^= (syscall.ECHO | syscall.ECHONL | syscall.ICANON | syscall.IEXTEN | syscall.ISIG)
+
+	err2 := termios.Tcsetattr(uintptr(syscall.Stdin), termios.TCSAFLUSH, tempState)
+	//terminalState, err = terminal.MakeRaw(0)
+	if err2 != nil {
+		panic(err)
+	}
+
+	//terminalState, err = terminal.MakeRaw(0)
+	//if err != nil {
+		//panic(err)
+	//}
+
 }
 
 func End() {
-	terminal.Restore(0, terminalState)
+	//terminal.Restore(0, terminalState)
+	termios.Tcsetattr(uintptr(syscall.Stdin), termios.TCSAFLUSH, terminalState)
 }
 
 func GetSize() (width, height int, err error) {

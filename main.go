@@ -11,7 +11,6 @@ import (
 )
 /* Alias ReadWriter */
 type ReadWriter = bufio.ReadWriter
-type File = os.File
 
 
 type Cursor struct {
@@ -24,7 +23,15 @@ type WinterState struct {
 	cursorPos Cursor
 	currentLine *BufferNode
 	fileName string
-	filePtr *File
+	//filePtr *File
+}
+
+type WinterError struct {
+	message string
+}
+
+func (e *WinterError) Error() string {
+	return fmt.Sprintf("%s", e.message)
 }
 
 /* Global State */
@@ -35,9 +42,9 @@ var termRW *ReadWriter
 
 func clearBuffer(buff []byte) {
 	buff[0] = 0
-	buff[1] = 1
-	buff[2] = 2
-	buff[3] = 3
+	buff[1] = 0
+	buff[2] = 0
+	buff[3] = 0
 }
 
 func updateCursorPosX(num int) {
@@ -68,12 +75,20 @@ func moveCursorX(num int, fn func(int)) {
 }
 
 func moveCursorY(num int, fn func(int)) {
-	buffer_length := sbGetBufferLength()
+	//buffer_length := sbGetBufferLength()
 	var (
 		currentLine *BufferNode
 		nextLine *BufferNode
+		currentLineIndex int
 	)
-	if ((myState.cursorPos.y - 1) + num) < buffer_length {
+	currentLineIndex = myState.cursorPos.y + num
+	//easyterm.CursorPos(29, 80)
+	//fmt.Print("Y-CurrentLineIndex: ")
+	//fmt.Print(currentLineIndex)
+	if currentLineIndex < 0 {
+		// trying to go up in the file, load lines from above if any
+
+	} else if currentLineIndex > 0 && currentLineIndex < DEFAULT_HEIGHT {
 		currentLine = sbGetLine(myState.cursorPos.y)
 		//updateCursorPosY(num)
 		nextLine = sbGetLine(myState.cursorPos.y + num)
@@ -93,20 +108,31 @@ func moveCursorY(num int, fn func(int)) {
 
 		myState.currentLine = nextLine
 		showEditorData()
+	} else if currentLineIndex == DEFAULT_HEIGHT {
+		// load the lines to bottom
+		sbLoadLine(DOWN)
 	}
 }
 
 func showEditorData() {
-	pos := 40
+	pos := 30
 	pos2 := 80
 	easyterm.CursorPos(pos, pos2)
-	fmt.Printf("Current Line Index: %v", myState.currentLine.index)
+	if myState.currentLine != nil {
+		fmt.Printf("Current Line Index: %v", myState.currentLine.index)
+	}
 	easyterm.CursorPos(pos+1, pos2)
 	fmt.Printf("Buffer Length: %v", sbGetBufferLength())
 	easyterm.CursorPos(pos+2, pos2)
 	fmt.Print("Position:")
 	easyterm.CursorPos(pos+3, pos2)
 	fmt.Printf("X: %v Y: %v", myState.cursorPos.x, myState.cursorPos.y)
+	easyterm.CursorPos(pos+4, pos2)
+	fmt.Print("filePtrIndex: ")
+	fmt.Print(sbGetFilePtrIndex())
+	easyterm.CursorPos(pos+5, pos2)
+	fmt.Print("DEFAULT_HEIGHT: ")
+	fmt.Print(DEFAULT_HEIGHT)
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -260,7 +286,7 @@ func backspaceLine() {
 	showEditorData()
 }
 // TODO: When the file is new or temp, don't actually create the file until it's saved by user
-func handleArguments(args []string) {
+func handleArguments(args []string) (*File, error) {
 
 	switch len(args) {
 
@@ -268,20 +294,22 @@ func handleArguments(args []string) {
 		// new file with no name, when saved do it with random name
 		myState.fileName = "winterTemp"
 		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
-			myState.filePtr = file
+			return file, nil
 		} else {
-			log.Fatal(err)
+			return nil, err
 		}
 	case 2:
 		myState.fileName = os.Args[1]
 		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
 			// Found the file, lets load it after
-			myState.filePtr = file
+			return file, nil
 
 		} else {
 			// Something happened, throw error
-			log.Fatal(err)
+			return nil, err
 		}
+	default:
+		return nil, &WinterError{"Argument Error."}
 	}
 }
 
@@ -306,9 +334,12 @@ func main() {
 	buffer = make([]byte, 4) // Length of an int var
 
 	// Handles file name, myState.filePtr should have been set
-	handleArguments(os.Args)
-
-	sbLoadFile(myState.filePtr)
+	file, err := handleArguments(os.Args)
+	if err == nil {
+			sbLoadFile(file)
+	} else {
+		log.Fatal(err)
+	}
 	sbPrintBuffer()
 	/* Get first line node to have something to write to */
 	myState.currentLine = sbGetLine(1)
@@ -320,6 +351,7 @@ func main() {
 			/* Means that the arrow keys where pressed */
 			/* This will send 3 bytes: Esc, [ and (A or B or C or D)  */
 			if bytesRead > 1 {
+				//fmt.Print(string(buffer[0]))
 				if buffer[0] == 27 && buffer[1] == 91 {
 
 					switch buffer[2] {
@@ -355,7 +387,7 @@ func main() {
 			} else {
 
 				letter := buffer[0]
-
+				//fmt.Print(letter)
 				switch {
 					case letter == 13:
 						// Enter
