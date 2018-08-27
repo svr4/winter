@@ -2,12 +2,11 @@ package easyterm
 
 
 import (
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/unix"
 	"github.com/pkg/term/termios"
 	"syscall"
 	"fmt"
 	"strconv"
-	"os"
 )
 /* Alias for type  */
 type Termios = syscall.Termios
@@ -23,7 +22,7 @@ var (
 
 func Init() {
 	/* Put terminal in raw mode */
-	err := termios.Tcgetattr(uintptr(syscall.Stdin), terminalState)
+	err := termios.Tcgetattr(uintptr(unix.Stdin), terminalState)
 	if err != nil {
 		panic(err)
 	}
@@ -32,13 +31,13 @@ func Init() {
 	var tempState = &Termios{}
 	*tempState = *terminalState
 
-	tempState.Iflag &^= (syscall.IGNBRK | syscall.PARMRK | syscall.INLCR | syscall.IGNCR | syscall.BRKINT | syscall.ICRNL | syscall.INPCK | syscall.ISTRIP | syscall.IXON)
-	tempState.Oflag &^= syscall.OPOST
-	tempState.Cflag &^= (syscall.CSIZE | syscall.PARENB)
-	tempState.Cflag |= syscall.CS8
-	tempState.Lflag &^= (syscall.ECHO | syscall.ECHONL | syscall.ICANON | syscall.IEXTEN | syscall.ISIG)
+	tempState.Iflag &^= (unix.IGNBRK | unix.PARMRK | unix.INLCR | unix.IGNCR | unix.BRKINT | unix.ICRNL | unix.INPCK | unix.ISTRIP | unix.IXON)
+	tempState.Oflag &^= unix.OPOST
+	tempState.Cflag &^= (unix.CSIZE | unix.PARENB)
+	tempState.Cflag |= unix.CS8
+	tempState.Lflag &^= (unix.ECHO | unix.ECHONL | unix.ICANON | unix.IEXTEN | unix.ISIG)
 
-	err2 := termios.Tcsetattr(uintptr(syscall.Stdin), termios.TCSAFLUSH, tempState)
+	err2 := termios.Tcsetattr(uintptr(unix.Stdin), termios.TCSAFLUSH, tempState)
 	//terminalState, err = terminal.MakeRaw(0)
 	if err2 != nil {
 		panic(err)
@@ -53,11 +52,16 @@ func Init() {
 
 func End() {
 	//terminal.Restore(0, terminalState)
-	termios.Tcsetattr(uintptr(syscall.Stdin), termios.TCSAFLUSH, terminalState)
+	termios.Tcsetattr(uintptr(unix.Stdin), termios.TCSAFLUSH, terminalState)
 }
 
 func GetSize() (width, height int, err error) {
-	return terminal.GetSize(int(os.Stdout.Fd()))
+	winSize, err := unix.IoctlGetWinsize(unix.Stdout, unix.TIOCGWINSZ)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(winSize.Col), int(winSize.Row), nil
+	//return terminal.GetSize(int(os.Stdout.Fd()))
 }
 
 func CursorUp(rows int) {
