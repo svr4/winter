@@ -10,12 +10,10 @@ import (
 )
 /* Alias for type  */
 type Termios = syscall.Termios
-//type State = terminal.State
 
 /* Global State */
 var (
 	terminalState = &Termios{}
-	//terminalState *State
 	err error
 )
 
@@ -37,22 +35,16 @@ func Init() {
 	tempState.Cflag |= unix.CS8
 	tempState.Lflag &^= (unix.ECHO | unix.ECHONL | unix.ICANON | unix.IEXTEN | unix.ISIG)
 
-	err2 := termios.Tcsetattr(uintptr(unix.Stdin), termios.TCSAFLUSH, tempState)
-	//terminalState, err = terminal.MakeRaw(0)
+	err2 := termios.Tcsetattr(uintptr(unix.Stdin), unix.TCSAFLUSH, tempState)
+	
 	if err2 != nil {
 		panic(err)
 	}
 
-	//terminalState, err = terminal.MakeRaw(0)
-	//if err != nil {
-		//panic(err)
-	//}
-
 }
 
 func End() {
-	//terminal.Restore(0, terminalState)
-	termios.Tcsetattr(uintptr(unix.Stdin), termios.TCSAFLUSH, terminalState)
+	termios.Tcsetattr(uintptr(unix.Stdin), unix.TCSAFLUSH, terminalState)
 }
 
 func GetSize() (width, height int, err error) {
@@ -61,7 +53,6 @@ func GetSize() (width, height int, err error) {
 		return 0, 0, err
 	}
 	return int(winSize.Col), int(winSize.Row), nil
-	//return terminal.GetSize(int(os.Stdout.Fd()))
 }
 
 func CursorUp(rows int) {
