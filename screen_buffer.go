@@ -1,4 +1,4 @@
-package winter
+package main
 
 import (
 	"fmt"
@@ -36,6 +36,7 @@ type ScreenBuffer struct {
 	filePtrIndex int64
 	filePtr *File
 	fileRW *ReadWriter
+	indexOfFirstVisibleLine int
 }
 
 /* The buffer */
