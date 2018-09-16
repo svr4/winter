@@ -24,6 +24,7 @@ type BlockMan struct {
 	ammountReadInLoadedBlock int
 	loadedBlock []byte
 	realBlockSize int // in bytes
+	workingBuffer *Buffer
 }
 /* Custom Errors */
 type BlockManError struct {
@@ -36,17 +37,16 @@ func (e *BlockManError) Error() string {
 
 /* "Constructor" */
 
-func (bm *BlockMan) Init(file *File) error {
-	if bm == nil {
-		return &BlockManError{"BlockMan object is nil."}
-	}
+func NewBlockMan(file *File) (*BlockMan) {
+	var bm = &BlockMan{}
 	bm.file = file
 	bm.blockSize = os.Getpagesize()
 	bm.fileRW = bufio.NewReadWriter(bufio.NewReader(bm.file), bufio.NewWriter(file))
 	bm.ammountReadInLoadedBlock = 0
 	bm.loadedBlock = nil
 	bm.realBlockSize = 0
-	return nil
+	bm.workingBuffer = nil
+	return bm
 }
 
 func (bm *BlockMan) Read() ([]byte, error) {
@@ -98,18 +98,22 @@ func loadBlock(bm *BlockMan) error {
 		}
 		bm.loadedBlock = buffer.Bytes()
 		bm.realBlockSize = totalBytesRead
+		bm.ammountReadInLoadedBlock = 0
 		return nil
 	}
 }
 
 func readHelper(bm *BlockMan) ([]byte, error) {
-	buffer := bytes.NewBuffer(bm.loadedBlock)
-	line, readingErr := buffer.ReadBytes('\n')
+	if bm.workingBuffer == nil || (bm.ammountReadInLoadedBlock == 0) {
+		bm.workingBuffer = bytes.NewBuffer(bm.loadedBlock)
+	}
+	line, readingErr := bm.workingBuffer.ReadBytes('\n')
 	if readingErr == nil {
 		bm.ammountReadInLoadedBlock += len(line)
 		return line, nil
 	}
 	if len(line) > 0 {
+		bm.ammountReadInLoadedBlock += len(line)
 		return line, readingErr
 	}
 	return nil, readingErr

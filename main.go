@@ -7,12 +7,20 @@ import (
 	"fmt"
 	"math"
 	"log"
-	//"strings"
+	"screenbuf"
+	"strings"
 )
 /* Alias ReadWriter */
+type File = os.File
 type ReadWriter = bufio.ReadWriter
+type ScreenBuffer = screenbuf.ScreenBuffer
+type BufferNode = screenbuf.BufferNode
 
-
+var (
+	UP = screenbuf.UP
+	SPLIT = screenbuf.SPLIT
+	DOWN = screenbuf.DOWN
+)
 type Cursor struct {
 	x int
 	y int
@@ -40,6 +48,9 @@ var myState WinterState
 /* stdin/stdout RW */
 var termRW *ReadWriter
 
+/* the ScreenBuffer*/
+var sb *ScreenBuffer
+
 func clearBuffer(buff []byte) {
 	buff[0] = 0
 	buff[1] = 0
@@ -65,7 +76,13 @@ func setCursorPos(y, x int) {
 }
 
 func moveCursorX(num int, fn func(int)) {
-	line_length := myState.currentLine.length
+	line_length := myState.currentLine.Length
+	// Handling tab movement
+	if ((myState.cursorPos.x - 1) < line_length) {
+		if myState.currentLine.RealLine[myState.cursorPos.x - 1] == '\t' {
+			num *= 8 // Tab
+		}
+	}
 	// Current pos + the next column < the length of the line
 	if ((myState.cursorPos.x - 1) + num) <= line_length {
 		fn(int(math.Abs(float64(num)))) // Calls the easyterm func with a positive number
@@ -88,10 +105,10 @@ func moveCursorY(num int, fn func(int)) {
 	if currentLineIndex < 0 {
 		// trying to go up in the file, load lines from above if any
 
-	} else if currentLineIndex > 0 && currentLineIndex < DEFAULT_HEIGHT {
-		currentLine = sbGetLine(myState.cursorPos.y)
+	} else if currentLineIndex > 0 && currentLineIndex < sb.DefaultHeight {
+		currentLine = sb.GetLine(myState.cursorPos.y)
 		//updateCursorPosY(num)
-		nextLine = sbGetLine(myState.cursorPos.y + num)
+		nextLine = sb.GetLine(myState.cursorPos.y + num)
 
 		if nextLine == nil {
 			return
@@ -100,17 +117,17 @@ func moveCursorY(num int, fn func(int)) {
 		fn(int(math.Abs(float64(num)))) // Calls the easyterm func with a positive number
 		updateCursorPosY(num)
 
-		if nextLine.length < currentLine.length {
+		if nextLine.Length < currentLine.Length {
 			//easyterm.CursorPos(0,1)
-			easyterm.CursorPos(myState.cursorPos.y, nextLine.length)
-			setCursorPos(myState.cursorPos.y, nextLine.length + 1)
+			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
+			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
 		}
 
 		myState.currentLine = nextLine
 		showEditorData()
-	} else if currentLineIndex == DEFAULT_HEIGHT {
+	} else if currentLineIndex == sb.DefaultHeight {
 		// load the lines to bottom
-		sbLoadLine(DOWN)
+		sb.LoadLine(DOWN)
 	}
 }
 
@@ -119,20 +136,17 @@ func showEditorData() {
 	pos2 := 80
 	easyterm.CursorPos(pos, pos2)
 	if myState.currentLine != nil {
-		fmt.Printf("Current Line Index: %v", myState.currentLine.index)
+		fmt.Printf("Current Line Index: %v", myState.currentLine.Index)
 	}
 	easyterm.CursorPos(pos+1, pos2)
-	fmt.Printf("Buffer Length: %v", sbGetBufferLength())
+	fmt.Printf("Buffer Length: %v", sb.GetBufferLength())
 	easyterm.CursorPos(pos+2, pos2)
 	fmt.Print("Position:")
 	easyterm.CursorPos(pos+3, pos2)
 	fmt.Printf("X: %v Y: %v", myState.cursorPos.x, myState.cursorPos.y)
 	easyterm.CursorPos(pos+4, pos2)
-	fmt.Print("filePtrIndex: ")
-	fmt.Print(sbGetFilePtrIndex())
-	easyterm.CursorPos(pos+5, pos2)
 	fmt.Print("DEFAULT_HEIGHT: ")
-	fmt.Print(DEFAULT_HEIGHT)
+	fmt.Print(sb.DefaultHeight)
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -141,59 +155,68 @@ func writeTextToBuffer(letter byte) {
 	switch {
 	// begining
 	case myState.cursorPos.x == 1:
-		myState.currentLine.line = string(letter) + myState.currentLine.line
+		myState.currentLine.Line = string(letter) + myState.currentLine.Line
+		myState.currentLine.RealLine = strings.Replace(myState.currentLine.Line, "\t", "\t" + sb.TabFiller, -1)
 	// end
-	case myState.cursorPos.x == (myState.currentLine.length + 1):
-		myState.currentLine.line += string(letter)
+	case myState.cursorPos.x == (myState.currentLine.Length + 1):
+		myState.currentLine.Line += string(letter)
+		myState.currentLine.RealLine = strings.Replace(myState.currentLine.Line, "\t", "\t" + sb.TabFiller, -1)
 	// middle
-	case myState.cursorPos.x < (myState.currentLine.length + 1):
-		total := make([]rune, myState.currentLine.length + 1)
-		firstHalf := make([]rune, len(myState.currentLine.line[0:myState.cursorPos.x - 1]))
-		copy(firstHalf, []rune(myState.currentLine.line[0:myState.cursorPos.x - 1]))
-		secondHalf := make([]rune, len(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
-		copy(secondHalf, []rune(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+	case myState.cursorPos.x < (myState.currentLine.Length + 1):
+		total := make([]rune, myState.currentLine.Length + 1)
+		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x - 1]))
+		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x - 1]))
+		secondHalf := make([]rune, len(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
+		copy(secondHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
 		copy(total, []rune(string(firstHalf) + string(letter) + string(secondHalf)))
-		myState.currentLine.line = string(total)
+		myState.currentLine.Line = unpackTabs(string(total))
+		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 	}
 	easyterm.ClearLine()
 	easyterm.CursorPos(myState.cursorPos.y, 1)
-	fmt.Print(myState.currentLine.line)
-	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
-	myState.currentLine.length = len(myState.currentLine.line)
+	fmt.Print(myState.currentLine.Line)
+	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+	myState.currentLine.Length = len(myState.currentLine.RealLine)
+	if letter == 9 {
+		easyterm.CursorRight(sb.TabSpace)
+		myState.cursorPos.x += sb.TabSpace
+	} else {
+		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
+	}
 }
 
 func backspaceLine() {
 
-	if myState.currentLine.length == 0 {
+	if myState.currentLine.Length == 0 {
 		// delete node, rehook list ends and move cursor to end of previous line
 		var (
 			prev *BufferNode
 			next *BufferNode
 		)
-		prev = myState.currentLine.prev
-		next = myState.currentLine.next
+		prev = myState.currentLine.Prev
+		next = myState.currentLine.Next
 
 		if prev != nil {
-			prev.next = next
+			prev.Next = next
 		} else {
 			return
 		}
 
 		if next != nil {
-			next.prev = prev
+			next.Prev = prev
 		}
 
-		myState.currentLine.prev = nil
-		myState.currentLine.next = nil
+		myState.currentLine.Prev = nil
+		myState.currentLine.Next = nil
 
 		myState.currentLine = prev
 
 		updateCursorPosY(-1) // move up one line in state
-		sbUpdateBufferIndexes()
-		sbReprintBuffer() // reprints complete buffer
-		easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.length + 1)
-		setCursorPos(myState.cursorPos.y, myState.currentLine.length + 1)
+		sb.UpdateBufferIndexes()
+		sb.ReprintBuffer() // reprints complete buffer
+		easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
+		setCursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
 		showEditorData()
 		return
 	}
@@ -203,23 +226,24 @@ func backspaceLine() {
 
 	switch {
 		// Between the first and last characters of a line
-	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.length + 1):
+	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.Length + 1):
 
-		total := make([]rune, myState.currentLine.length - 1)
-		firstHalf := make([]rune, len(myState.currentLine.line[0:myState.cursorPos.x-2]))
-		copy(firstHalf, []rune(myState.currentLine.line[0:myState.cursorPos.x-2]))
-		secondHalf := make([]rune, len(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
-		copy(secondHalf, []rune(myState.currentLine.line[myState.cursorPos.x-1:myState.currentLine.length]))
+		total := make([]rune, myState.currentLine.Length - 1)
+		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+		secondHalf := make([]rune, len(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
+		copy(secondHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
 		copy(total, []rune(string(firstHalf) + string(secondHalf)))
-		myState.currentLine.line = string(total)
-		myState.currentLine.length = len(total)
+		myState.currentLine.Line = unpackTabs(string(total))
+		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
+		myState.currentLine.Length = len(myState.currentLine.RealLine)
 
 		// reprint line
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-		fmt.Print(myState.currentLine.line) // write updated line again
+		fmt.Print(myState.currentLine.Line) // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
 		easyterm.CursorLeft(1)
@@ -229,26 +253,27 @@ func backspaceLine() {
 
 		// check if we have line on top, if not do nothing, else move it up
 		var prev *BufferNode
-		prev = myState.currentLine.prev
+		prev = myState.currentLine.Prev
 		if prev != nil {
 			// move current line up
-			origPrevLineLength := prev.length // to move the cursor later
-			currentText := make([]rune, myState.currentLine.length)
-			copy(currentText, []rune(myState.currentLine.line))
-			prev.line += string(currentText)
-			prev.length = len(prev.line)
+			origPrevLineLength := prev.Length // to move the cursor later
+			currentText := make([]rune, myState.currentLine.Length)
+			copy(currentText, []rune(myState.currentLine.RealLine))
+			prev.Line += unpackTabs(string(currentText))
+			prev.RealLine = packTabs(prev.Line)
+			prev.Length = len(prev.Line)
 
 			// rehook list, sans the soon to be destroyed node and update currentLine state
 			var next *BufferNode
-			next = myState.currentLine.next
+			next = myState.currentLine.Next
 			if next != nil {
-				prev.next = next
-				next.prev = prev
-				myState.currentLine.prev = nil
-				myState.currentLine.next = nil
+				prev.Next = next
+				next.Prev = prev
+				myState.currentLine.Prev = nil
+				myState.currentLine.Next = nil
 			} else {
-				prev.next = nil
-				myState.currentLine.prev = nil
+				prev.Next = nil
+				myState.currentLine.Prev = nil
 			}
 
 			myState.currentLine = prev
@@ -257,8 +282,8 @@ func backspaceLine() {
 			easyterm.ClearLine()
 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 			fmt.Print(myState.currentLine.line) // write updated line again*/
-			sbUpdateBufferIndexes()
-			sbReprintBuffer() // reprints complete buffer
+			sb.UpdateBufferIndexes()
+			sb.ReprintBuffer() // reprints complete buffer
 			easyterm.CursorPos(myState.cursorPos.y, origPrevLineLength+1)
 			setCursorPos(myState.cursorPos.y, origPrevLineLength + 1)
 			//easyterm.CursorPos(20, 1)
@@ -266,18 +291,19 @@ func backspaceLine() {
 
 		}
 
-	case myState.cursorPos.x == (myState.currentLine.length + 1):
+	case myState.cursorPos.x == (myState.currentLine.Length + 1):
 
-		newLine := make([]rune, myState.currentLine.length-1)
-		copy(newLine, []rune(myState.currentLine.line[0:myState.currentLine.length-1]))
-		myState.currentLine.line = string(newLine)
-		myState.currentLine.length = len(myState.currentLine.line)
+		newLine := make([]rune, myState.currentLine.Length-1)
+		copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-1]))
+		myState.currentLine.Line = unpackTabs(string(newLine))
+		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
+		myState.currentLine.Length = len(myState.currentLine.Line)
 
 		// reprint line
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-		fmt.Print(myState.currentLine.line) // write updated line again
+		fmt.Print(myState.currentLine.Line) // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
 		easyterm.CursorLeft(1)
@@ -285,6 +311,15 @@ func backspaceLine() {
 	}
 	showEditorData()
 }
+
+func packTabs(line string) string {
+	return strings.Replace(line, "\t", "\t" + sb.TabFiller, -1)
+}
+
+func unpackTabs(line string) string {
+	return strings.Replace(line, "\t" + sb.TabFiller, "\t", -1)
+}
+
 // TODO: When the file is new or temp, don't actually create the file until it's saved by user
 func handleArguments(args []string) (*File, error) {
 
@@ -336,13 +371,17 @@ func main() {
 	// Handles file name, myState.filePtr should have been set
 	file, err := handleArguments(os.Args)
 	if err == nil {
-			sbLoadFile(file)
+		/* Init the ScreenBuffer */
+		sb = screenbuf.NewScreenBuffer(file)
+		sb.LoadFile()
 	} else {
 		log.Fatal(err)
 	}
-	sbPrintBuffer()
+	sb.PrintBuffer()
+	myState.cursorPos.x = 1
+	myState.cursorPos.y = 1
 	/* Get first line node to have something to write to */
-	myState.currentLine = sbGetLine(1)
+	myState.currentLine = sb.GetLine(1)
 	showEditorData()
 
 	for {
@@ -393,11 +432,11 @@ func main() {
 						// Enter
 						//easyterm.CursorNextLine(1)
 						//updateCursorPosY(1)
-						sbAddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
+						sb.AddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
 						updateCursorPosY(1)
 						easyterm.CursorPos(myState.cursorPos.y, 1)
 						setCursorPos(myState.cursorPos.y, 1)
-						myState.currentLine = sbGetLine(myState.cursorPos.y)
+						myState.currentLine = sb.GetLine(myState.cursorPos.y)
 						showEditorData()
 						//fmt.Println(sbGetBufferLength())
 						//myState.currentLine = sbGetLine(myState.cursorPos.y)
@@ -423,6 +462,10 @@ func main() {
 						easyterm.CursorPos(1,1)
 						easyterm.End()
 						return
+
+					case letter == 9:
+						// Tab
+						writeTextToBuffer(letter)
 					case letter > 0 && letter <= 31:
 						// Do nothing
 

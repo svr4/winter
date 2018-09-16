@@ -1,6 +1,6 @@
 package main
 
-import (
+/*import (
 	"fmt"
 	"easyterm"
 	"bufio"
@@ -40,9 +40,9 @@ type ScreenBuffer struct {
 }
 
 /* The buffer */
-var buffer ScreenBuffer
+//var buffer ScreenBuffer
 
-
+/*
 func sbLoadFile(file *File) {
 	// init buffer length
 	buffer.length = 0;
@@ -363,7 +363,7 @@ func sbAddLineToBuffer(line, column int) {
 
 					/*traveler.line = string(origText[0:column])
 					traveler.length = len(traveler.line)*/
-			}
+			/*}
 
 			sbUpdateBufferIndexes()
 			sbReprintBuffer()
@@ -371,4 +371,4 @@ func sbAddLineToBuffer(line, column int) {
 		}
 	}
 
-}
+}*/
