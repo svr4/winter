@@ -156,11 +156,11 @@ func writeTextToBuffer(letter byte) {
 	// begining
 	case myState.cursorPos.x == 1:
 		myState.currentLine.Line = string(letter) + myState.currentLine.Line
-		myState.currentLine.RealLine = strings.Replace(myState.currentLine.Line, "\t", "\t" + sb.TabFiller, -1)
+		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 	// end
 	case myState.cursorPos.x == (myState.currentLine.Length + 1):
 		myState.currentLine.Line += string(letter)
-		myState.currentLine.RealLine = strings.Replace(myState.currentLine.Line, "\t", "\t" + sb.TabFiller, -1)
+		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 	// middle
 	case myState.cursorPos.x < (myState.currentLine.Length + 1):
 		total := make([]rune, myState.currentLine.Length + 1)
@@ -187,6 +187,45 @@ func writeTextToBuffer(letter byte) {
 }
 
 func backspaceLine() {
+
+	// Handling tab backspace
+	var tabPos int = (myState.cursorPos.x - 1) - sb.TabSpace
+	if tabPos >= 0 && tabPos < myState.currentLine.Length {
+		// This means we can check for tabs backwards
+		if myState.currentLine.RealLine[tabPos] == '\t' {
+			total := make([]rune, myState.currentLine.Length - sb.TabSpace)
+			var firstHalf []rune
+			if tabPos == 0 {
+				firstHalf = make([]rune, len(myState.currentLine.RealLine[(myState.cursorPos.x - 1):myState.currentLine.Length]))
+				copy(firstHalf, []rune(myState.currentLine.RealLine[(myState.cursorPos.x - 1):myState.currentLine.Length]))
+				copy(total, []rune(string(firstHalf)))
+
+			} else if tabPos > 0 {
+				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:tabPos]))
+				copy(firstHalf, []rune(myState.currentLine.RealLine[0:tabPos]))
+
+				secondHalf := make([]rune, len(myState.currentLine.RealLine[(myState.cursorPos.x - 1):myState.currentLine.Length]))
+				copy(secondHalf, []rune(myState.currentLine.RealLine[(myState.cursorPos.x - 1):myState.currentLine.Length]))
+
+				copy(total, []rune(string(firstHalf) + string(secondHalf)))
+			}
+
+			myState.currentLine.Line = unpackTabs(string(total))
+			myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
+			myState.currentLine.Length = len(myState.currentLine.RealLine)
+
+			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+			easyterm.ClearLine()
+			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+			fmt.Print(myState.currentLine.Line) // write updated line again
+			easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+
+			easyterm.CursorLeft(sb.TabSpace)
+			updateCursorPosX(-1 * sb.TabSpace)
+
+			return
+		}
+	}
 
 	if myState.currentLine.Length == 0 {
 		// delete node, rehook list ends and move cursor to end of previous line
@@ -248,7 +287,8 @@ func backspaceLine() {
 		// move & update cursor
 		easyterm.CursorLeft(1)
 		updateCursorPosX(-1)
-
+	
+	// At the start of a line
 	case myState.cursorPos.x == 1:
 
 		// check if we have line on top, if not do nothing, else move it up
@@ -290,7 +330,7 @@ func backspaceLine() {
 			//fmt.Print(sbGetBufferLength())
 
 		}
-
+		// At the very end of a line
 	case myState.cursorPos.x == (myState.currentLine.Length + 1):
 
 		newLine := make([]rune, myState.currentLine.Length-1)
