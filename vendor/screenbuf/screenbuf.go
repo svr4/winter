@@ -47,6 +47,7 @@ type ScreenBuffer struct {
 	DefaultWidth int
 	TabFiller string
 	TabSpace int
+	TabStops []int
 }
 
 func NewScreenBuffer(file *File)(*ScreenBuffer) {
@@ -69,6 +70,20 @@ func NewScreenBuffer(file *File)(*ScreenBuffer) {
 	sb.TabSpace = TAB_SPACE
 	for i:=0; i < TAB_SPACE - 1; i++ {
 		sb.TabFiller += " "		
+	}
+	var numOfStops int = (sb.DefaultWidth / sb.TabSpace)
+	sb.TabStops = make([]int, numOfStops)
+
+	var tabIdx int = 0
+	for ii:= 1; ii <= sb.DefaultWidth; ii++ {
+		if ii % sb.TabSpace == 0 {
+			if tabIdx < len(sb.TabStops) {
+				sb.TabStops[tabIdx] = ii
+				tabIdx++
+			} else {
+				break;
+			}
+		}
 	}
 
 	return sb
@@ -102,7 +117,7 @@ func (buffer *ScreenBuffer) LoadFile() {
 			if i == 1 {
 				temp.Index = i
 				temp.Line = strings.Trim(string(lineBytes), "\n")
-				temp.RealLine = packTabs(buffer, temp.Line) // pad with 8 spaces the line //"\t       "
+				temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line //"\t       "
 				temp.Length = len(temp.RealLine)
 				temp.Prev = nil
 				temp.Next = nil
@@ -113,7 +128,7 @@ func (buffer *ScreenBuffer) LoadFile() {
 				temp = &BufferNode{}
 				temp.Index = i
 				temp.Line = strings.Trim(string(lineBytes), "\n")
-				temp.RealLine = packTabs(buffer, temp.Line) // pad with 8 spaces the line
+				temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
 				temp.Length = len(temp.RealLine)
 				temp.Prev = traveler
 				temp.Next = nil
@@ -295,13 +310,13 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 					newText := make([]rune, len(newRune))
 					copy(newText, newRune)
 					// set the string on the new line
-					temp.Line = unpackTabs(buffer, string(newText))
-					temp.RealLine = packTabs(buffer, temp.Line)
+					temp.Line = buffer.UnpackTabs(string(newText))
+					temp.RealLine = buffer.PackTabs(temp.Line)
 					temp.Length = len(temp.RealLine)
 
 					// update the old lines text
-					traveler.Line = unpackTabs(buffer, string(origRune))
-					traveler.RealLine = packTabs(buffer, traveler.Line)
+					traveler.Line = buffer.UnpackTabs(string(origRune))
+					traveler.RealLine = buffer.PackTabs(traveler.Line)
 					traveler.Length = len(traveler.RealLine)
 
 					/*traveler.line = string(origText[0:column])
@@ -316,6 +331,50 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 
 }
 
+func (sb *ScreenBuffer) NextTabStop(index int) int {
+	var tabStopsLen = len(sb.TabStops)
+	var nextStop int = 0
+	for i:=0; i < tabStopsLen; i ++ {
+		if (i + 1) < tabStopsLen {
+			if index < sb.TabStops[i] {
+				nextStop = sb.TabStops[i]
+				break
+			} else if index == sb.TabStops[i] {
+				nextStop = sb.TabStops[i+1]
+				break
+			} else if index > sb.TabStops[i] && index < sb.TabStops[i + 1] {
+				nextStop = sb.TabStops[i + 1]
+				break
+			}
+		}
+	}
+	return nextStop
+}
+
+func (sb *ScreenBuffer) PrevTabStop(index int) int {
+	var tabStopsLen = len(sb.TabStops)
+	var prevStop int = 0
+	for i:=tabStopsLen - 1; i >= 0; i-- {
+		// Could be used to better the NextTabStop search
+		if (i - 1) >= 0 {
+			if index >= sb.TabStops[i] {
+				prevStop = sb.TabStops[i - 1]
+				break
+			}
+		}
+	}
+	return prevStop
+}
+
+func (sb *ScreenBuffer) IsATabStop(index int) bool {
+	for i:=0; i < len(sb.TabStops); i++ {
+		if sb.TabStops[i] == index {
+			return true
+		}
+	}
+	return false
+}
+
 func manageNewLineString(col, length int) int {
 	if col == 1 {
 		return UP
@@ -328,12 +387,84 @@ func manageNewLineString(col, length int) int {
 	}
 }
 
-func packTabs(sb *ScreenBuffer, line string) string {
-	return strings.Replace(line, "\t", "\t" + sb.TabFiller, -1)
+func (sb *ScreenBuffer) PackTabs(line string) string {
+	var filler string = ""
+	var nextStop int
+	origString := make([]rune, len(line))
+	copy(origString, []rune(line))
+
+	var workingFiller []rune
+	var firstHalf, secondHalf []rune
+	
+	for i:=0; i < len(origString); i++ {
+		if origString[i] == '\t' {
+
+			nextStop = sb.NextTabStop(i)
+
+			for ii:=i; ii < nextStop - 1; ii++ {
+				filler += " "
+			}
+			
+			workingFiller = make([]rune, len(filler))
+			copy(workingFiller, []rune(filler))
+
+			firstHalf = make([]rune, len(origString[0:i]))
+			copy(firstHalf, origString[0:i])
+
+			if (i + 1) < len(origString) {
+				secondHalf = make([]rune, len(origString[i+1:len(origString)]))
+				copy(secondHalf, origString[i+1:len(origString)])
+			} else {
+				secondHalf = make([]rune, 0)
+			}
+			
+			newLine := string(firstHalf) + "\t" + string(workingFiller) + string(secondHalf)
+			origString = make([]rune, len(newLine))
+			copy(origString, []rune(newLine))
+			
+			i += len(workingFiller)
+			filler = ""
+		}
+	}
+	return string(origString)
+	
 }
 
-func unpackTabs(sb *ScreenBuffer, line string) string {
-	return strings.Replace(line, "\t" + sb.TabFiller, "\t", -1)
+func (sb *ScreenBuffer) UnpackTabs(line string) string {
+	var nextStop int
+	origString := make([]rune, len(line))
+	copy(origString, []rune(line))
+
+	var firstHalf, secondHalf []rune
+
+	for i:=len(origString) - 1; i >= 0 ; i-- {
+		if origString[i] == '\t' {
+			
+			nextStop = sb.NextTabStop(i)
+			
+			if nextStop > len(origString) || len(origString[i:nextStop]) == 0 {
+				continue
+			} else {
+				var tabFill []rune = origString[i+1:nextStop]
+				if (!strings.Contains(string(tabFill), " ")){
+					continue
+				}
+			}
+
+			firstHalf = make([]rune, len(origString[0:i+1]))
+			copy(firstHalf, origString[0:i+1])
+
+			secondHalf = make([]rune, len(origString[nextStop:len(origString)]))
+			copy(secondHalf, origString[nextStop:len(origString)])
+
+			newLine := string(firstHalf) + string(secondHalf)
+			origString = make([]rune, len(newLine))
+
+			copy(origString, []rune(newLine))
+		}
+	}
+	return string(origString)
+	
 }
 
 func sbReadLine(bm *BlockMan) ([]byte, error) {
@@ -351,7 +482,7 @@ func sbEnqueueLine(buffer *ScreenBuffer, line []byte, where int) {
 		temp.Index = buffer.Length + 1
 		temp.Line = string(line)
 		temp.Length = len(temp.Line)
-		temp.RealLine = strings.Replace(temp.Line, "\t", "\t" + buffer.TabFiller, -1)
+		temp.RealLine = buffer.PackTabs(temp.Line)
 		temp.Prev = traveler
 		temp.Next = nil
 
@@ -364,5 +495,17 @@ func sbEnqueueLine(buffer *ScreenBuffer, line []byte, where int) {
 }
 
 func sbDequeueLine() {
+
+}
+
+func screenReAdjustmentAndDataCleanUp() {
+
+	// check if list is longer than the screen size, mean we move line up
+	// know which node is the first one on screen
+	// move the index of the first node on screen
+	// 
+
+
+
 
 }
