@@ -193,6 +193,7 @@ func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
 
 func (buffer *ScreenBuffer) PrintBuffer() {
 	var i int = 1
+	easyterm.ShowCursor(false)
 	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
 		fmt.Printf("%s\n", traveler.Line)
 		i++
@@ -207,6 +208,7 @@ func (buffer *ScreenBuffer) PrintBuffer() {
 		easyterm.CursorPos(x,1)
 	}
 	easyterm.CursorPos(1,1)
+	easyterm.ShowCursor(true)
 	//fmt.Println("lenght: " + strconv.Itoa(buffer.length))
 }
 
@@ -236,11 +238,6 @@ func (buffer *ScreenBuffer) UpdateBufferIndexes() {
 		traveler.Index = i
 		i++
 	}
-	if i < buffer.DefaultHeight {
-		buffer.IndexOfLastVisisbleLine = i
-	} else {
-		buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
-	}
 }
 
 func (buffer *ScreenBuffer) PrintLine(line int) {
@@ -265,6 +262,7 @@ func (buffer *ScreenBuffer) GetLine(line int) *BufferNode {
 
 func (buffer *ScreenBuffer) ReprintBuffer()  {
 	i := 1
+	easyterm.ShowCursor(false)
 	for traveler := buffer.GetLine(buffer.IndexOfFirstVisibleLine);
 	traveler != nil && traveler.Index <= buffer.IndexOfLastVisisbleLine; traveler = traveler.Next {
 		easyterm.CursorPos(i,1)
@@ -286,7 +284,7 @@ func (buffer *ScreenBuffer) ReprintBuffer()  {
 		fmt.Printf("~\n")
 		easyterm.CursorPos(x,1)
 	}
-
+	easyterm.ShowCursor(true)
 }
 
 func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
@@ -565,10 +563,10 @@ func (sb *ScreenBuffer) screenBuffByteSize () uintptr {
 
 func reprintBufferWindow(sb *ScreenBuffer) {
 	i := 1
+	easyterm.ShowCursor(false)
+	easyterm.Clear()
 	for traveler := sb.GetLine(sb.IndexOfFirstVisibleLine);
 	traveler != nil && traveler.Index <= sb.IndexOfLastVisisbleLine; traveler = traveler.Next {
-		easyterm.CursorPos(i,1)
-		easyterm.ClearLine()
 		easyterm.CursorPos(i,1)
 		if traveler.Next != nil {
 			fmt.Printf("%s\n", traveler.Line)
@@ -577,6 +575,7 @@ func reprintBufferWindow(sb *ScreenBuffer) {
 		}		
 		i++
 	}
+	easyterm.ShowCursor(true)
 }
 
 func screenDownReAdjustment(sb *ScreenBuffer) {
@@ -602,7 +601,7 @@ func screenUpReAdjustment(sb *ScreenBuffer) {
 	var firstNodeIndex = sb.IndexOfFirstVisibleLine - 1
 	var lastNodeIndex = sb.IndexOfLastVisisbleLine - 1
 	if hasNodeAtIndex(sb, firstNodeIndex) {
-		sb.IndexOfLastVisisbleLine = firstNodeIndex
+		sb.IndexOfFirstVisibleLine = firstNodeIndex
 	}
 	if hasNodeAtIndex(sb, lastNodeIndex) {
 		sb.IndexOfLastVisisbleLine = lastNodeIndex

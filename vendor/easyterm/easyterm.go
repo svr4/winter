@@ -102,3 +102,11 @@ func ClearFromCursor() {
 func ClearLine() {
 	fmt.Print("\033[2K")
 }
+
+func ShowCursor(show bool) {
+	if show {
+		fmt.Print("\033[?25h")
+	} else {
+		fmt.Print("\033[?25l")
+	}
+}

@@ -102,14 +102,17 @@ func moveCursorY(num int, fn func(int)) {
 	//easyterm.CursorPos(29, 80)
 	//fmt.Print("Y-CurrentLineIndex: ")
 	//fmt.Print(currentLineIndex)
-	if currentLineIndex < 0 {
+	if currentLineIndex == 0 {
 		// trying to go up in the file, load lines from above if any
 		sb.LoadLine(UP, myState.currentLine.Index)
+		if myState.currentLine.Prev != nil {
+			myState.currentLine = myState.currentLine.Prev
+		}
 
 	} else if currentLineIndex > 0 && currentLineIndex < sb.DefaultHeight {
-		currentLine = sb.GetLine(myState.cursorPos.y)
+		currentLine = myState.currentLine
 		//updateCursorPosY(num)
-		nextLine = sb.GetLine(myState.cursorPos.y + num)
+		nextLine = sb.GetLine(currentLine.Index + num)
 
 		if nextLine == nil {
 			return
@@ -130,7 +133,7 @@ func moveCursorY(num int, fn func(int)) {
 		// load the lines to bottom
 		sb.LoadLine(DOWN, myState.currentLine.Index)
 		if myState.currentLine.Next != nil {
-			myState.currentLine = sb.GetLine(myState.currentLine.Next.Index)
+			myState.currentLine = myState.currentLine.Next
 		}
 	}
 	showEditorData()
@@ -152,6 +155,10 @@ func showEditorData() {
 	easyterm.CursorPos(pos+4, pos2)
 	fmt.Print("DEFAULT_HEIGHT: ")
 	fmt.Print(sb.DefaultHeight)
+	easyterm.CursorPos(pos+5, pos2)
+	fmt.Printf("Index of first visible line: %v", sb.IndexOfFirstVisibleLine)
+	easyterm.CursorPos(pos+6, pos2)
+	fmt.Printf("Index of last visible line: %v", sb.IndexOfLastVisisbleLine)
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
