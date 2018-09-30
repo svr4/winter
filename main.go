@@ -104,6 +104,7 @@ func moveCursorY(num int, fn func(int)) {
 	//fmt.Print(currentLineIndex)
 	if currentLineIndex < 0 {
 		// trying to go up in the file, load lines from above if any
+		sb.LoadLine(UP, myState.currentLine.Index)
 
 	} else if currentLineIndex > 0 && currentLineIndex < sb.DefaultHeight {
 		currentLine = sb.GetLine(myState.cursorPos.y)
@@ -124,11 +125,15 @@ func moveCursorY(num int, fn func(int)) {
 		}
 
 		myState.currentLine = nextLine
-		showEditorData()
+
 	} else if currentLineIndex == sb.DefaultHeight {
 		// load the lines to bottom
-		sb.LoadLine(DOWN)
+		sb.LoadLine(DOWN, myState.currentLine.Index)
+		if myState.currentLine.Next != nil {
+			myState.currentLine = sb.GetLine(myState.currentLine.Next.Index)
+		}
 	}
+	showEditorData()
 }
 
 func showEditorData() {
@@ -139,7 +144,7 @@ func showEditorData() {
 		fmt.Printf("Current Line Index: %v", myState.currentLine.Index)
 	}
 	easyterm.CursorPos(pos+1, pos2)
-	fmt.Printf("Buffer Length: %v", sb.GetBufferLength())
+	fmt.Printf("Buffer Length: %v", sb.Size())
 	easyterm.CursorPos(pos+2, pos2)
 	fmt.Print("Position:")
 	easyterm.CursorPos(pos+3, pos2)
@@ -298,6 +303,10 @@ func backspaceLine() {
 		next = myState.currentLine.Next
 
 		if prev != nil {
+			// verify that if we are working with the first visible line we update the buffer
+			if myState.currentLine.Index == sb.IndexOfFirstVisibleLine {
+				sb.IndexOfFirstVisibleLine -= 1
+			}
 			prev.Next = next
 		} else {
 			return
@@ -356,6 +365,10 @@ func backspaceLine() {
 		var prev *BufferNode
 		prev = myState.currentLine.Prev
 		if prev != nil {
+			// verify that if we are working with the first visible line we update the buffer
+			if myState.currentLine.Index == sb.IndexOfFirstVisibleLine {
+				sb.IndexOfFirstVisibleLine -= 1
+			}
 			// move current line up
 			origPrevLineLength := prev.Length // to move the cursor later
 			currentText := make([]rune, myState.currentLine.Length)

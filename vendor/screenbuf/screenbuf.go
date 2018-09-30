@@ -9,6 +9,7 @@ import (
 	"os"
 	"blockman"
 	"strings"
+	"unsafe"
 	//"strconv"
 )
 type Buffer = bytes.Buffer
@@ -39,9 +40,10 @@ type BufferNode struct {
 type ScreenBuffer struct {
 	Head *BufferNode
 	Length int
-	MaxSizeInBytes int
+	MaxSizeInBytes int64
 	FilePtr *File
 	IndexOfFirstVisibleLine int
+	IndexOfLastVisisbleLine int
 	Blockman *BlockMan
 	DefaultHeight int
 	DefaultWidth int
@@ -54,6 +56,24 @@ func NewScreenBuffer(file *File)(*ScreenBuffer) {
 	var sb = &ScreenBuffer{}
 	sb.Length = 0;
 	sb.FilePtr = file
+
+	// Set the max size in bytes to a third of the size of the file or OS page size
+	if fileInfo, errr := sb.FilePtr.Stat(); errr == nil && fileInfo.Size() > 0 {
+
+		if gigs := fileInfo.Size() / 1000000000; gigs > 0 {
+			sb.MaxSizeInBytes = int64(gigs / 8) // only one eight of the file
+		} else if megs := fileInfo.Size() / 1000000; megs > 0  { // size in megs or lower
+			sb.MaxSizeInBytes = int64(megs / 6)
+		} else if kilos := fileInfo.Size() / 1000; kilos > 0 {
+			sb.MaxSizeInBytes = int64(kilos / 4)
+		} else {
+			sb.MaxSizeInBytes = int64(os.Getpagesize())
+		}
+
+	} else {
+		sb.MaxSizeInBytes = int64(os.Getpagesize())
+	}
+
 	// Init blockman
 	var bm = blockman.NewBlockMan(sb.FilePtr)
 	sb.Blockman = bm
@@ -139,17 +159,34 @@ func (buffer *ScreenBuffer) LoadFile() {
 			}
 		}
 	}
-
+	buffer.IndexOfLastVisisbleLine = buffer.Length
 }
 
-func (sb *ScreenBuffer) LoadLine(fromWhere int) {
+func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
+	currentLine := sb.GetLine(currentLineIndex)
+
 	switch fromWhere {
 	case UP:
 
+		if currentLine.Prev != nil {
+			screenUpReAdjustment(sb)
+		}
+
+
 	case DOWN:
-		line, err := sbReadLine(sb.Blockman)
-		if err == nil {
-			sbEnqueueLine(sb,line, DOWN)
+
+		/*if sb.screenBuffByteSize() >= uintptr(sb.MaxSizeInBytes) {
+			// need to move invisible top lines to the .~filename
+		}*/
+
+		if currentLine.Next == nil {
+			line, err := sbReadLine(sb.Blockman)
+			if err == nil {
+				sbEnqueueLine(sb,line, DOWN)
+				screenDownReAdjustment(sb)
+			}
+		} else {
+			screenDownReAdjustment(sb)
 		}
 	}
 }
@@ -184,7 +221,7 @@ func (buffer *ScreenBuffer) GetLineLength(line int) int {
 	return i
 }
 
-func (buffer *ScreenBuffer) GetBufferLength() int {
+func (buffer *ScreenBuffer) Size() int {
 	size := 0
 	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
 		size++
@@ -198,6 +235,11 @@ func (buffer *ScreenBuffer) UpdateBufferIndexes() {
 	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
 		traveler.Index = i
 		i++
+	}
+	if i < buffer.DefaultHeight {
+		buffer.IndexOfLastVisisbleLine = i
+	} else {
+		buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
 	}
 }
 
@@ -223,7 +265,8 @@ func (buffer *ScreenBuffer) GetLine(line int) *BufferNode {
 
 func (buffer *ScreenBuffer) ReprintBuffer()  {
 	i := 1
-	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
+	for traveler := buffer.GetLine(buffer.IndexOfFirstVisibleLine);
+	traveler != nil && traveler.Index <= buffer.IndexOfLastVisisbleLine; traveler = traveler.Next {
 		easyterm.CursorPos(i,1)
 		easyterm.ClearLine()
 		easyterm.CursorPos(i,1)
@@ -253,6 +296,7 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 
 			var temp = &BufferNode{}
 			temp.Line = ""
+			temp.RealLine = ""
 			temp.Length = 0
 			// col - 1 because screen is 1 based and strings are 0 based
 			//fmt.Printf("%v\n", temp.prev)
@@ -375,18 +419,6 @@ func (sb *ScreenBuffer) IsATabStop(index int) bool {
 	return false
 }
 
-func manageNewLineString(col, length int) int {
-	if col == 1 {
-		return UP
-	} else if col > 1 && col < length {
-		return SPLIT
-	} else if col >= length {
-		return DOWN
-	} else {
-		return -1
-	}
-}
-
 func (sb *ScreenBuffer) PackTabs(line string) string {
 	var filler string = ""
 	var nextStop int
@@ -467,6 +499,20 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 	
 }
 
+/* Private functions */
+
+func manageNewLineString(col, length int) int {
+	if col == 1 {
+		return UP
+	} else if col > 1 && col < length {
+		return SPLIT
+	} else if col >= length {
+		return DOWN
+	} else {
+		return -1
+	}
+}
+
 func sbReadLine(bm *BlockMan) ([]byte, error) {
 	return bm.Read()
 }
@@ -481,8 +527,8 @@ func sbEnqueueLine(buffer *ScreenBuffer, line []byte, where int) {
 		var temp = &BufferNode{}
 		temp.Index = buffer.Length + 1
 		temp.Line = string(line)
-		temp.Length = len(temp.Line)
 		temp.RealLine = buffer.PackTabs(temp.Line)
+		temp.Length = len(temp.RealLine)
 		temp.Prev = traveler
 		temp.Next = nil
 
@@ -498,14 +544,68 @@ func sbDequeueLine() {
 
 }
 
-func screenReAdjustmentAndDataCleanUp() {
+func hasNodeAtIndex(sb *ScreenBuffer, index int) bool {
+	var containsIndex bool = false
+	for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
+		if traveler.Index == index {
+			containsIndex = true
+			break
+		}
+	}
+	return containsIndex
+}
 
-	// check if list is longer than the screen size, mean we move line up
-	// know which node is the first one on screen
-	// move the index of the first node on screen
-	// 
+func (sb *ScreenBuffer) screenBuffByteSize () uintptr {
+	var size uintptr = 0
+	for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
+		size += unsafe.Sizeof(traveler.RealLine)
+	}
+	return size
+}
 
+func reprintBufferWindow(sb *ScreenBuffer) {
+	i := 1
+	for traveler := sb.GetLine(sb.IndexOfFirstVisibleLine);
+	traveler != nil && traveler.Index <= sb.IndexOfLastVisisbleLine; traveler = traveler.Next {
+		easyterm.CursorPos(i,1)
+		easyterm.ClearLine()
+		easyterm.CursorPos(i,1)
+		if traveler.Next != nil {
+			fmt.Printf("%s\n", traveler.Line)
+		} else {
+			fmt.Printf("%s", traveler.Line)
+		}		
+		i++
+	}
+}
 
+func screenDownReAdjustment(sb *ScreenBuffer) {
+	// If this is called we know we want the screen to move up one line
+	// by changing the id for the first visible line to the next id down
+	// and reprinting the file
+	var firstNodeIndex int = sb.IndexOfFirstVisibleLine + 1
+	var lastNodeIndex = sb.IndexOfLastVisisbleLine + 1
+	if hasNodeAtIndex(sb, firstNodeIndex) {
+		sb.IndexOfFirstVisibleLine = firstNodeIndex
+	}
+	if hasNodeAtIndex(sb, lastNodeIndex) {
+		sb.IndexOfLastVisisbleLine = lastNodeIndex
+	}
+	reprintBufferWindow(sb)
 
+	// check that buffer is small enough. If large move top lines to temp file ~.filename
+	// and load lines later from there
 
+}
+
+func screenUpReAdjustment(sb *ScreenBuffer) {
+	var firstNodeIndex = sb.IndexOfFirstVisibleLine - 1
+	var lastNodeIndex = sb.IndexOfLastVisisbleLine - 1
+	if hasNodeAtIndex(sb, firstNodeIndex) {
+		sb.IndexOfLastVisisbleLine = firstNodeIndex
+	}
+	if hasNodeAtIndex(sb, lastNodeIndex) {
+		sb.IndexOfLastVisisbleLine = lastNodeIndex
+	}
+	reprintBufferWindow(sb)
 }
