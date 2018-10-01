@@ -157,6 +157,26 @@ func (buffer *ScreenBuffer) LoadFile() {
 				traveler = traveler.Next
 				buffer.Length++
 			}
+		} else if err == io.EOF && len(lineBytes) > 0 {
+			temp = &BufferNode{}
+			temp.Index = i
+			temp.Line = ""
+			for err == io.EOF && len(lineBytes) > 0 {
+				temp.Line += string(lineBytes)
+				lineBytes, err = sbReadLine(buffer.Blockman);
+			}
+			if err == nil && len(lineBytes) > 0 {
+				temp.Line += string(lineBytes)
+			}
+			temp.Line = strings.Trim(temp.Line, "\n")
+			temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
+			temp.Length = len(temp.RealLine)
+			temp.Prev = traveler
+			temp.Next = nil
+
+			traveler.Next = temp
+			traveler = traveler.Next
+			buffer.Length++
 		}
 	}
 	buffer.IndexOfLastVisisbleLine = buffer.Length
@@ -181,7 +201,7 @@ func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
 
 		if currentLine.Next == nil {
 			line, err := sbReadLine(sb.Blockman)
-			if err == nil {
+			if err == nil || (err == io.EOF && len(line) > 0) {
 				sbEnqueueLine(sb,line, DOWN)
 				screenDownReAdjustment(sb)
 			}
