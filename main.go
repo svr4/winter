@@ -451,7 +451,7 @@ func unpackTabs(line string) string {
 }
 
 func saveFile() {
-	sb.Save()
+	sb.Save(myState.fileName)
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -461,14 +461,12 @@ func handleArguments(args []string) (*File, error) {
 	switch len(args) {
 
 	case 1:
+		myState.fileName = ""
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
 		myState.fileName = os.Args[1]
 		//pwd, _ := os.Getwd()
 		if _, existsErr := os.Stat(myState.fileName); !os.IsNotExist(existsErr) {
-			// fmt.Print("exists!")
-			// easyterm.End()
-			// os.Exit(1)
 			if file, err := os.OpenFile(myState.fileName, os.O_RDONLY, 0666); err == nil {
 				// Found the file, lets load it after
 				return file, nil
@@ -481,6 +479,7 @@ func handleArguments(args []string) (*File, error) {
 			return nil, &WinterError{"New file.", true}
 		}
 	default:
+		myState.fileName = ""
 		return nil, &WinterError{"Argument Error.", false}
 	}
 }

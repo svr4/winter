@@ -556,14 +556,19 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 	
 }
 
-func (sb *ScreenBuffer) Save() {
+func (sb *ScreenBuffer) Save(editorFileName string) {
 
 	if sb.isNewFile && sb.Dirty {
 		// Read console to get filename
 		// Just write whole buffer into file
 		// Save into current working dir
 		//easyterm.StartReadMultiCharInput()
-		var fileName string = handleSavePrompt(sb)
+		var fileName string
+		if editorFileName == "" {
+			fileName = handleSavePrompt(sb)
+		} else {
+			fileName = editorFileName
+		}
 		if len(fileName) > 0 {
 			pwd, wderr := os.Getwd()
 			if wderr == nil {
