@@ -16,6 +16,7 @@ type Buffer = bytes.Buffer
 type File = os.File
 type ReadWriter = bufio.ReadWriter
 type BlockMan = blockman.BlockMan
+type BlockManError = blockman.BlockManError
 
 // Consts represent what to do with the
 // content when the user presses enter on a line
@@ -50,27 +51,37 @@ type ScreenBuffer struct {
 	TabFiller string
 	TabSpace int
 	TabStops []int
+	isNewFile bool
+	Dirty bool
 }
 
 func NewScreenBuffer(file *File)(*ScreenBuffer) {
 	var sb = &ScreenBuffer{}
 	sb.Length = 0;
-	sb.FilePtr = file
+	sb.Dirty = false
 
-	// Set the max size in bytes to a third of the size of the file or OS page size
-	if fileInfo, errr := sb.FilePtr.Stat(); errr == nil && fileInfo.Size() > 0 {
+	if file != nil {
+		sb.FilePtr = file
+		sb.isNewFile = false
+		// Set the max size in bytes to a third of the size of the file or OS page size
+		if fileInfo, errr := sb.FilePtr.Stat(); errr == nil && fileInfo.Size() > 0 {
 
-		if gigs := fileInfo.Size() / 1000000000; gigs > 0 {
-			sb.MaxSizeInBytes = int64(gigs / 8) // only one eight of the file
-		} else if megs := fileInfo.Size() / 1000000; megs > 0  { // size in megs or lower
-			sb.MaxSizeInBytes = int64(megs / 6)
-		} else if kilos := fileInfo.Size() / 1000; kilos > 0 {
-			sb.MaxSizeInBytes = int64(kilos / 4)
+			if gigs := fileInfo.Size() / 1000000000; gigs > 0 {
+				sb.MaxSizeInBytes = int64(gigs / 8) // only one eight of the file
+			} else if megs := fileInfo.Size() / 1000000; megs > 0  { // size in megs or lower
+				sb.MaxSizeInBytes = int64(megs / 6)
+			} else if kilos := fileInfo.Size() / 1000; kilos > 0 {
+				sb.MaxSizeInBytes = int64(kilos / 4)
+			} else {
+				sb.MaxSizeInBytes = int64(os.Getpagesize())
+			}
+
 		} else {
 			sb.MaxSizeInBytes = int64(os.Getpagesize())
 		}
-
 	} else {
+		sb.isNewFile = true
+		sb.FilePtr = nil
 		sb.MaxSizeInBytes = int64(os.Getpagesize())
 	}
 
@@ -114,14 +125,29 @@ func (buffer *ScreenBuffer) LoadFile() {
 	var temp = &BufferNode{}
 	var traveler = &BufferNode{}
 
+	if buffer.isNewFile {
+		temp.Index = 1
+		temp.Line = ""
+		temp.RealLine = ""
+		temp.Length = len(temp.RealLine)
+		temp.Prev = nil
+		temp.Next = nil
+		buffer.Head = temp
+		buffer.Length++;
+		return
+	}
+
 	for i := 1; i < buffer.DefaultHeight; i ++ {
 		lineBytes, err := sbReadLine(buffer.Blockman); // Send blockmanager to read
+		// fmt.Print(err)
+		// 	easyterm.End()
+		// 	os.Exit(1)
 		//easyterm.CursorPos(1,1)
 		//fmt.Print(string(lineBytes))
 		//fmt.Print(err)
 		//os.Exit(1)
 		// already at the end
-		if err == io.EOF && buffer.Length == 0 {
+		if err == io.EOF && buffer.Length == 0 && len(lineBytes) == 0 {
 			temp.Index = i
 			temp.Line = ""
 			temp.RealLine = ""
@@ -169,14 +195,25 @@ func (buffer *ScreenBuffer) LoadFile() {
 				temp.Line += string(lineBytes)
 			}
 			temp.Line = strings.Trim(temp.Line, "\n")
+			temp.Line = strings.Trim(temp.Line, "\000") // remove null termination from EOF
 			temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
 			temp.Length = len(temp.RealLine)
-			temp.Prev = traveler
-			temp.Next = nil
-
-			traveler.Next = temp
-			traveler = traveler.Next
+			if i == 1 {
+				temp.Prev = nil
+				temp.Next = nil
+				buffer.Head = temp
+				traveler = buffer.Head
+			} else {
+				temp.Prev = traveler
+				temp.Next = nil
+				traveler.Next = temp
+				traveler = traveler.Next
+			}
+			
 			buffer.Length++
+		} else if err != io.EOF {
+			fmt.Println(err)
+			os.Exit(1)
 		}
 	}
 	buffer.IndexOfLastVisisbleLine = buffer.Length
@@ -204,6 +241,8 @@ func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
 			if err == nil || (err == io.EOF && len(line) > 0) {
 				sbEnqueueLine(sb,line, DOWN)
 				screenDownReAdjustment(sb)
+			} else if bmerr, ok := err.(*BlockManError); ok && !bmerr.HasFile() {
+				// if there is no bm in file do nothing
 			}
 		} else {
 			screenDownReAdjustment(sb)
@@ -517,6 +556,40 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 	
 }
 
+func (sb *ScreenBuffer) Save() {
+
+	if sb.isNewFile && sb.Dirty {
+		// Read console to get filename
+		// Just write whole buffer into file
+		// Save into current working dir
+		//easyterm.StartReadMultiCharInput()
+		var fileName string = handleSavePrompt(sb)
+		if len(fileName) > 0 {
+			pwd, wderr := os.Getwd()
+			if wderr == nil {
+				if newFile, err := os.OpenFile(pwd + "/" + fileName, os.O_WRONLY | os.O_CREATE, 0666); err == nil {
+					fw := bufio.NewWriter(newFile)
+					var bytesWritten int = 0
+					for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
+						bw, _ := fw.Write([]byte(traveler.Line))
+						bytesWritten += bw
+						fw.Flush()
+					}
+					newFile.Close()
+					sb.Dirty = false
+					easyterm.CursorPos(sb.DefaultHeight, 1)
+					fmt.Printf("Saved file: %v. Bytes Written: %v", fileName, bytesWritten)
+				}
+			}
+		}
+	} else if sb.Dirty {
+		// Not a new file
+		// Make a temp file, write buffer data
+		// Then write rest of data from the original to the new one
+		// Then move temp to original file.
+	}
+}
+
 /* Private functions */
 
 func manageNewLineString(col, length int) int {
@@ -627,4 +700,84 @@ func screenUpReAdjustment(sb *ScreenBuffer) {
 		sb.IndexOfLastVisisbleLine = lastNodeIndex
 	}
 	reprintBufferWindow(sb)
+}
+
+func handleSavePrompt(sb *ScreenBuffer) string {
+	easyterm.CursorPos(sb.DefaultHeight, 1)
+	var savePromt string = "Enter file name: "
+	fmt.Print(savePromt)
+	var fileName string = ""
+	var esc bool = false
+	buffer := make([]byte, 4)
+	termReader := bufio.NewReader(os.Stdin)
+	for !esc {
+		if bytesRead, err := termReader.Read(buffer); err == nil {
+			if bytesRead > 1 {
+				if buffer[0] == 27 && buffer[1] == 91 {
+
+					switch buffer[2] {
+
+					case 68:
+						// Left arrow
+					case 65:
+						// Up arrow
+					case 67:
+						// Right arrow
+					case 66:
+						// Down arrow
+					}
+				} // If not [ ignore the Esc
+
+			} else {
+
+				letter := buffer[0]
+				switch {
+					case letter == 13:
+						// Enter
+						if len(fileName) > 0 {
+							easyterm.CursorPos(sb.DefaultHeight, 1)
+							easyterm.ClearLine()
+							esc = true
+						}
+					case letter == 127:
+						// Backspace
+						if len(fileName) > 0 {
+							var workingFn []rune = make([]rune, len(fileName) - 1)
+							copy(workingFn, []rune(fileName[0:len(fileName) - 1]))
+							fileName = string(workingFn)
+							easyterm.CursorPos(sb.DefaultHeight, 1)
+							easyterm.ClearLine()
+							fmt.Print(savePromt)
+							fmt.Print(fileName)
+						}
+				  case letter == 27:
+						// Do Nothing for Esc for now
+						easyterm.CursorPos(sb.DefaultHeight, 1)
+						easyterm.ClearLine()
+						fileName = ""
+						esc = true
+					case letter == 19:
+						// Ctrl-S
+
+					case letter == 17:
+						// Ctrl-Q
+						easyterm.Clear()
+						easyterm.CursorPos(1,1)
+						easyterm.End()
+						os.Exit(0)
+
+					case letter == 9:
+						// Tab
+					case letter > 0 && letter <= 31:
+						// Do nothing
+
+					default:
+						fmt.Print(string(letter))
+						fileName += string(letter)
+				}
+
+			}
+		}
+	}
+	return fileName
 }

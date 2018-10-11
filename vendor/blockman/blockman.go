@@ -11,7 +11,7 @@ import (
 /* Type Alias */
 type Buffer = bytes.Buffer
 type File = os.File
-type ReadWriter = bufio.ReadWriter
+type Reader = bufio.Reader
 
 type BlockManager interface {
 	Read() ([]byte, error)
@@ -19,39 +19,60 @@ type BlockManager interface {
 
 type BlockMan struct {
 	file *File
-	fileRW *ReadWriter
+	fileRW *Reader
 	blockSize int
 	ammountReadInLoadedBlock int
 	loadedBlock []byte
 	realBlockSize int // in bytes
 	workingBuffer *Buffer
+	TotalBytesRead int
 }
 /* Custom Errors */
 type BlockManError struct {
 	message string
+	hasFile bool
+}
+
+type IBlockManError interface {
+	Error()
+	HasFile()
 }
 
 func (e *BlockManError) Error() string {
 	return fmt.Sprintf("%s", e.message)
 }
 
+func (e *BlockManError) HasFile() bool {
+	return e.hasFile
+}
+
 /* "Constructor" */
 
 func NewBlockMan(file *File) (*BlockMan) {
 	var bm = &BlockMan{}
-	bm.file = file
 	bm.blockSize = os.Getpagesize()
-	bm.fileRW = bufio.NewReadWriter(bufio.NewReader(bm.file), bufio.NewWriter(file))
+	if file != nil {
+		bm.file = file
+		bm.fileRW = bufio.NewReader(bufio.NewReader(bm.file))
+	} else {
+		bm.file = nil
+		bm.fileRW = nil
+	}
 	bm.ammountReadInLoadedBlock = 0
 	bm.loadedBlock = nil
 	bm.realBlockSize = 0
 	bm.workingBuffer = nil
+	bm.TotalBytesRead = 0
 	return bm
 }
 
 func (bm *BlockMan) Read() ([]byte, error) {
 	if bm == nil {
-		return nil, &BlockManError{"BlockMan object is nil."}
+		return nil, &BlockManError{"BlockMan object is nil.", false}
+	}
+
+	if bm.file == nil || bm.fileRW == nil {
+		return nil, &BlockManError{"No file in Block Manager.", false}
 	}
 
 	var (
@@ -79,6 +100,10 @@ func (bm *BlockMan) Read() ([]byte, error) {
 	return line, err
 }
 
+func (bm *BlockMan) BytesRead() int {
+	return bm.TotalBytesRead
+}
+
 func loadBlock(bm *BlockMan) error {
 	totalBytesRead := 0
 	// A blockSize'd buffer
@@ -98,6 +123,7 @@ func loadBlock(bm *BlockMan) error {
 		}
 		bm.loadedBlock = buffer.Bytes()
 		bm.realBlockSize = totalBytesRead
+		bm.TotalBytesRead += totalBytesRead
 		bm.ammountReadInLoadedBlock = 0
 		return nil
 	}

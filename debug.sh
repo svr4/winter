@@ -1,6 +1,6 @@
 #!/bin/bash
 
-data="$(ps -o pid,comm | grep -i './bin/winter')"
+data="$(ps -o pid,comm | grep -i '.*winter')"
 
 IFS=' '
 read -ra ARR <<< $data

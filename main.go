@@ -6,7 +6,6 @@ import (
 	"os"
 	"fmt"
 	"math"
-	"log"
 	"screenbuf"
 	"strings"
 )
@@ -36,10 +35,20 @@ type WinterState struct {
 
 type WinterError struct {
 	message string
+	newFile bool
+}
+
+type IWinterError interface {
+	Error()
+	IsNewFile()
 }
 
 func (e *WinterError) Error() string {
 	return fmt.Sprintf("%s", e.message)
+}
+
+func (e *WinterError) IsNewFile() bool {
+	return e.newFile
 }
 
 /* Global State */
@@ -441,31 +450,38 @@ func unpackTabs(line string) string {
 	return sb.UnpackTabs(line)
 }
 
+func saveFile() {
+	sb.Save()
+	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+}
+
 // TODO: When the file is new or temp, don't actually create the file until it's saved by user
 func handleArguments(args []string) (*File, error) {
 
 	switch len(args) {
 
 	case 1:
-		// new file with no name, when saved do it with random name
-		myState.fileName = "winterTemp"
-		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
-			return file, nil
-		} else {
-			return nil, err
-		}
+		return nil, &WinterError{"No file name entered.", true}
 	case 2:
 		myState.fileName = os.Args[1]
-		if file, err := os.OpenFile(myState.fileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
-			// Found the file, lets load it after
-			return file, nil
-
+		//pwd, _ := os.Getwd()
+		if _, existsErr := os.Stat(myState.fileName); !os.IsNotExist(existsErr) {
+			// fmt.Print("exists!")
+			// easyterm.End()
+			// os.Exit(1)
+			if file, err := os.OpenFile(myState.fileName, os.O_RDONLY, 0666); err == nil {
+				// Found the file, lets load it after
+				return file, nil
+	
+			} else {
+				// Something happened, throw error
+				return nil, err
+			}
 		} else {
-			// Something happened, throw error
-			return nil, err
+			return nil, &WinterError{"New file.", true}
 		}
 	default:
-		return nil, &WinterError{"Argument Error."}
+		return nil, &WinterError{"Argument Error.", false}
 	}
 }
 
@@ -496,7 +512,14 @@ func main() {
 		sb = screenbuf.NewScreenBuffer(file)
 		sb.LoadFile()
 	} else {
-		log.Fatal(err)
+		// If the file doesn't exist or if something went wrong
+		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile(){
+			sb = screenbuf.NewScreenBuffer(nil)
+			sb.LoadFile()
+		} else {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 	sb.PrintBuffer()
 	myState.cursorPos.x = 1
@@ -554,6 +577,7 @@ func main() {
 						//easyterm.CursorNextLine(1)
 						//updateCursorPosY(1)
 						sb.AddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
+						sb.Dirty = true
 						updateCursorPosY(1)
 						easyterm.CursorPos(myState.cursorPos.y, 1)
 						setCursorPos(myState.cursorPos.y, 1)
@@ -571,11 +595,13 @@ func main() {
 						//updateCursorPosX(-1)
 						//easyterm.ClearFromCursor()
 						backspaceLine()
+						sb.Dirty = true
 				  case letter == 27:
 						// Do Nothing for Esc for now
 
 					case letter == 19:
 						// Save
+						saveFile()
 
 					case letter == 17:
 						// Ctrl-Q
@@ -587,6 +613,7 @@ func main() {
 					case letter == 9:
 						// Tab
 						writeTextToBuffer(letter)
+						sb.Dirty = true
 					case letter > 0 && letter <= 31:
 						// Do nothing
 
@@ -596,6 +623,7 @@ func main() {
 						//fmt.Printf("%s", string(letter))
 						//updateCursorPosX(1)
 						writeTextToBuffer(letter)
+						sb.Dirty = true
 				}
 
 			}
