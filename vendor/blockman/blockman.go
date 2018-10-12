@@ -25,7 +25,7 @@ type BlockMan struct {
 	loadedBlock []byte
 	realBlockSize int // in bytes
 	workingBuffer *Buffer
-	TotalBytesRead int
+	TotalBytesRead int64
 }
 /* Custom Errors */
 type BlockManError struct {
@@ -100,7 +100,7 @@ func (bm *BlockMan) Read() ([]byte, error) {
 	return line, err
 }
 
-func (bm *BlockMan) BytesRead() int {
+func (bm *BlockMan) BytesRead() int64 {
 	return bm.TotalBytesRead
 }
 
@@ -123,7 +123,7 @@ func loadBlock(bm *BlockMan) error {
 		}
 		bm.loadedBlock = buffer.Bytes()
 		bm.realBlockSize = totalBytesRead
-		bm.TotalBytesRead += totalBytesRead
+		bm.TotalBytesRead += int64(totalBytesRead)
 		bm.ammountReadInLoadedBlock = 0
 		return nil
 	}

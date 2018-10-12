@@ -30,6 +30,7 @@ type WinterState struct {
 	cursorPos Cursor
 	currentLine *BufferNode
 	fileName string
+	filePath string
 	//filePtr *File
 }
 
@@ -451,7 +452,7 @@ func unpackTabs(line string) string {
 }
 
 func saveFile() {
-	sb.Save(myState.fileName)
+	sb.Save(myState.fileName, myState.filePath)
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -462,12 +463,19 @@ func handleArguments(args []string) (*File, error) {
 
 	case 1:
 		myState.fileName = ""
+		myState.filePath = "./"
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
-		myState.fileName = os.Args[1]
+		fnArr := strings.Split(os.Args[1], "/")
+		myState.fileName = fnArr[len(fnArr) - 1]
+		if len(fnArr) > 1 {
+			myState.filePath = strings.Join(fnArr[0:len(fnArr) - 1], "/")
+		} else {
+			myState.filePath = "./"
+		}
 		//pwd, _ := os.Getwd()
-		if _, existsErr := os.Stat(myState.fileName); !os.IsNotExist(existsErr) {
-			if file, err := os.OpenFile(myState.fileName, os.O_RDONLY, 0666); err == nil {
+		if _, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
+			if file, err := os.Open(myState.filePath + "/" + myState.fileName); err == nil {
 				// Found the file, lets load it after
 				return file, nil
 	
