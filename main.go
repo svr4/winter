@@ -244,7 +244,7 @@ func backspaceLine() {
 	var prevTabStop int = sb.PrevTabStop(myState.cursorPos.x - 1)
 	var backSpacePos int = myState.cursorPos.x
 
-	if backSpacePos > myState.currentLine.Length {
+	if backSpacePos > myState.currentLine.Length && (myState.currentLine.Length > 0) {
 		backSpacePos -= 2
 	} else {
 		backSpacePos -= 1
@@ -362,6 +362,15 @@ func backspaceLine() {
 
 		updateCursorPosY(-1) // move up one line in state
 		sb.UpdateBufferIndexes()
+		// When we delete a line we can load the next one on screen if any in sb, else load if we have any
+		lastLineOnScreen := sb.GetLine(sb.IndexOfLastVisisbleLine - 1)
+		if lastLineOnScreen != nil {
+			if lastLineOnScreen.Next == nil {
+				sb.LoadLine(DOWN, lastLineOnScreen.Index)
+			} else {
+				sb.IndexOfLastVisisbleLine = lastLineOnScreen.Next.Index
+			}
+		}
 		sb.ReprintBuffer() // reprints complete buffer
 		easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
 		setCursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
@@ -407,6 +416,7 @@ func backspaceLine() {
 			// verify that if we are working with the first visible line we update the buffer
 			if myState.currentLine.Index == sb.IndexOfFirstVisibleLine {
 				sb.IndexOfFirstVisibleLine -= 1
+				sb.IndexOfLastVisisbleLine -= 1
 			}
 			// move current line up
 			origPrevLineLength := prev.Length // to move the cursor later
@@ -436,6 +446,15 @@ func backspaceLine() {
 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 			fmt.Print(myState.currentLine.line) // write updated line again*/
 			sb.UpdateBufferIndexes()
+			// When we delete a line we can load the next one on screen if any in sb, else load if we have any
+			lastLineOnScreen := sb.GetLine(sb.IndexOfLastVisisbleLine - 1)
+			if lastLineOnScreen != nil {
+				if lastLineOnScreen.Next == nil {
+					sb.LoadLine(DOWN, lastLineOnScreen.Index)
+				} else {
+					sb.IndexOfLastVisisbleLine = lastLineOnScreen.Next.Index
+				}
+			}
 			sb.ReprintBuffer() // reprints complete buffer
 			easyterm.CursorPos(myState.cursorPos.y, origPrevLineLength+1)
 			setCursorPos(myState.cursorPos.y, origPrevLineLength + 1)

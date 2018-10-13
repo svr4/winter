@@ -323,16 +323,18 @@ func (buffer *ScreenBuffer) GetLine(line int) *BufferNode {
 func (buffer *ScreenBuffer) ReprintBuffer()  {
 	i := 1
 	easyterm.ShowCursor(false)
+	easyterm.Clear()
 	for traveler := buffer.GetLine(buffer.IndexOfFirstVisibleLine);
 	traveler != nil && traveler.Index <= buffer.IndexOfLastVisisbleLine; traveler = traveler.Next {
+		//easyterm.CursorPos(i,1)
+		//easyterm.ClearLine()
 		easyterm.CursorPos(i,1)
-		easyterm.ClearLine()
-		easyterm.CursorPos(i,1)
-		if traveler.Next != nil {
-			fmt.Printf("%s\n", traveler.Line)
-		} else {
-			fmt.Printf("%s", traveler.Line)
-		}
+		fmt.Printf("%s", traveler.Line)
+		// if traveler.Next != nil {
+		// 	fmt.Printf("%s\n", traveler.Line)
+		// } else {
+		// 	fmt.Printf("%s", traveler.Line)
+		// }
 		//fmt.Printf("%d\n", traveler.index)
 		i++
 	}
@@ -426,11 +428,11 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 			}
 
 			buffer.UpdateBufferIndexes()
-			if buffer.Length < buffer.DefaultHeight {
-				buffer.IndexOfLastVisisbleLine = buffer.Length
-			} else {
-				buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
-			}
+			// if buffer.Length < buffer.DefaultHeight {
+			// 	buffer.IndexOfLastVisisbleLine = buffer.Length
+			// } else {
+			// 	buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
+			// }
 			buffer.ReprintBuffer()
 			//easyterm.CursorPos(line,column)
 		}
@@ -682,13 +684,13 @@ func sbReadLine(bm *BlockMan) ([]byte, error) {
 
 func sbEnqueueLine(buffer *ScreenBuffer, line []byte, where int) {
 	// add line via reading or add line via enter
-	traveler := buffer.GetLine(buffer.Length)
+	traveler := buffer.GetLine(buffer.Size())
 	switch where {
 	case UP:
 
 	case DOWN:
 		var temp = &BufferNode{}
-		temp.Index = buffer.Length + 1
+		temp.Index = traveler.Index + 1
 		temp.Line = strings.Trim(string(line), "\n")
 		temp.RealLine = buffer.PackTabs(temp.Line)
 		temp.Length = len(temp.RealLine)
@@ -726,6 +728,10 @@ func (sb *ScreenBuffer) screenBuffByteSize () uintptr {
 	return size
 }
 
+func (sb *ScreenBuffer) ReprintBufferWindow() {
+	reprintBufferWindow(sb)
+}
+
 func reprintBufferWindow(sb *ScreenBuffer) {
 	i := 1
 	easyterm.ShowCursor(false)
@@ -750,10 +756,8 @@ func screenDownReAdjustment(sb *ScreenBuffer) {
 	// and reprinting the file
 	var firstNodeIndex int = sb.IndexOfFirstVisibleLine + 1
 	var lastNodeIndex = sb.IndexOfLastVisisbleLine + 1
-	if hasNodeAtIndex(sb, firstNodeIndex) {
+	if hasNodeAtIndex(sb, firstNodeIndex) && hasNodeAtIndex(sb, lastNodeIndex) {
 		sb.IndexOfFirstVisibleLine = firstNodeIndex
-	}
-	if hasNodeAtIndex(sb, lastNodeIndex) {
 		sb.IndexOfLastVisisbleLine = lastNodeIndex
 	}
 	reprintBufferWindow(sb)
@@ -766,10 +770,8 @@ func screenDownReAdjustment(sb *ScreenBuffer) {
 func screenUpReAdjustment(sb *ScreenBuffer) {
 	var firstNodeIndex = sb.IndexOfFirstVisibleLine - 1
 	var lastNodeIndex = sb.IndexOfLastVisisbleLine - 1
-	if hasNodeAtIndex(sb, firstNodeIndex) {
+	if hasNodeAtIndex(sb, firstNodeIndex) && hasNodeAtIndex(sb, lastNodeIndex) {
 		sb.IndexOfFirstVisibleLine = firstNodeIndex
-	}
-	if hasNodeAtIndex(sb, lastNodeIndex) {
 		sb.IndexOfLastVisisbleLine = lastNodeIndex
 	}
 	reprintBufferWindow(sb)
