@@ -351,93 +351,88 @@ func (buffer *ScreenBuffer) ReprintBuffer()  {
 
 func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 
-	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
-		if traveler.Index == line {
-
-			var temp = &BufferNode{}
-			temp.Line = ""
-			temp.RealLine = ""
-			temp.Length = 0
-			// col - 1 because screen is 1 based and strings are 0 based
-			//fmt.Printf("%v\n", temp.prev)
-			var insertWhere = manageNewLineString(column, traveler.Length)
-			//fmt.Printf("%d\n",insertWhere)
-			switch insertWhere {
-				case UP:
-					var prev *BufferNode
-					prev = traveler.Prev
-					//temp.index = traveler.index
-					temp.Next = traveler
-					if prev != nil {
-						temp.Prev = prev
-						prev.Next = temp
-					} else {
-						temp.Prev = nil
-					}
-					traveler.Prev = temp
-					if traveler.Index == 1 {
-						buffer.Head = temp
-					}
-					//traveler.index += 1
-					buffer.Length += 1
-				case DOWN:
-					var next *BufferNode
-					next = traveler.Next
-					temp.Prev = traveler
-					//temp.index = traveler.index + 1
-					if next != nil {
-						next.Prev = temp
-						temp.Next = next
-					}
-					traveler.Next = temp
-					buffer.Length += 1
-				case SPLIT:
-					var next *BufferNode
-					next = traveler.Next
-					temp.Prev = traveler
-					if next != nil {
-						next.Prev = temp
-						temp.Next = next
-					}
-					traveler.Next = temp
-					buffer.Length += 1
-					// Split text
-					origText := make([]rune, traveler.Length)
-					// Copy original text to origText
-					copy(origText, []rune(traveler.RealLine))
-					// New original lines text
-					origRune := make([]rune, len(origText[0:(column - 1)]))
-					// Copying original lines new text to rune
-					copy(origRune, origText[0:column - 1])
-					// slice with new line text
-					newRune := origText[(column - 1):traveler.Length]
-					newText := make([]rune, len(newRune))
-					copy(newText, newRune)
-					// set the string on the new line
-					temp.Line = buffer.UnpackTabs(string(newText))
-					temp.RealLine = buffer.PackTabs(temp.Line)
-					temp.Length = len(temp.RealLine)
-
-					// update the old lines text
-					traveler.Line = buffer.UnpackTabs(string(origRune))
-					traveler.RealLine = buffer.PackTabs(traveler.Line)
-					traveler.Length = len(traveler.RealLine)
-
-					/*traveler.line = string(origText[0:column])
-					traveler.length = len(traveler.line)*/
+	traveler := buffer.GetLine(line)
+	var temp = &BufferNode{}
+	temp.Line = ""
+	temp.RealLine = ""
+	temp.Length = 0
+	// col - 1 because screen is 1 based and strings are 0 based
+	//fmt.Printf("%v\n", temp.prev)
+	var insertWhere = manageNewLineString(column, traveler.Length)
+	//fmt.Printf("%d\n",insertWhere)
+	switch insertWhere {
+		case UP:
+			var prev *BufferNode
+			prev = traveler.Prev
+			//temp.index = traveler.index
+			temp.Next = traveler
+			if prev != nil {
+				temp.Prev = prev
+				prev.Next = temp
+			} else {
+				temp.Prev = nil
 			}
+			traveler.Prev = temp
+			if traveler.Index == 1 {
+				buffer.Head = temp
+			}
+			//traveler.index += 1
+			buffer.Length += 1
+		case DOWN:
+			var next *BufferNode
+			next = traveler.Next
+			temp.Prev = traveler
+			//temp.index = traveler.index + 1
+			if next != nil {
+				next.Prev = temp
+				temp.Next = next
+			}
+			traveler.Next = temp
+			buffer.Length += 1
+		case SPLIT:
+			var next *BufferNode
+			next = traveler.Next
+			temp.Prev = traveler
+			if next != nil {
+				next.Prev = temp
+				temp.Next = next
+			}
+			traveler.Next = temp
+			buffer.Length += 1
+			// Split text
+			origText := make([]rune, traveler.Length)
+			// Copy original text to origText
+			copy(origText, []rune(traveler.RealLine))
+			// New original lines text
+			origRune := make([]rune, len(origText[0:(column - 1)]))
+			// Copying original lines new text to rune
+			copy(origRune, origText[0:column - 1])
+			// slice with new line text
+			newRune := origText[(column - 1):traveler.Length]
+			newText := make([]rune, len(newRune))
+			copy(newText, newRune)
+			// set the string on the new line
+			temp.Line = buffer.UnpackTabs(string(newText))
+			temp.RealLine = buffer.PackTabs(temp.Line)
+			temp.Length = len(temp.RealLine)
 
-			buffer.UpdateBufferIndexes()
-			// if buffer.Length < buffer.DefaultHeight {
-			// 	buffer.IndexOfLastVisisbleLine = buffer.Length
-			// } else {
-			// 	buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
-			// }
-			buffer.ReprintBuffer()
-			//easyterm.CursorPos(line,column)
-		}
+			// update the old lines text
+			traveler.Line = buffer.UnpackTabs(string(origRune))
+			traveler.RealLine = buffer.PackTabs(traveler.Line)
+			traveler.Length = len(traveler.RealLine)
+
+			/*traveler.line = string(origText[0:column])
+			traveler.length = len(traveler.line)*/
 	}
 
+	buffer.UpdateBufferIndexes()
+	// if buffer.Length < buffer.DefaultHeight {
+	// 	buffer.IndexOfLastVisisbleLine = buffer.Length
+	// } else {
+	// 	buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
+	// }
+	buffer.ReprintBuffer()
+	//easyterm.CursorPos(line,column)
 }
 
 func (sb *ScreenBuffer) NextTabStop(index int) int {

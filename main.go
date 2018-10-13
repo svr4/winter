@@ -624,12 +624,14 @@ func main() {
 						// Enter
 						//easyterm.CursorNextLine(1)
 						//updateCursorPosY(1)
-						sb.AddLineToBuffer(myState.cursorPos.y, myState.cursorPos.x)
+						var oldLineIndex int = myState.currentLine.Index
+						sb.AddLineToBuffer(myState.currentLine.Index, myState.cursorPos.x)
+						//myState.currentLine = sb.GetLine(newIndex)
 						sb.Dirty = true
 						updateCursorPosY(1)
 						easyterm.CursorPos(myState.cursorPos.y, 1)
 						setCursorPos(myState.cursorPos.y, 1)
-						myState.currentLine = sb.GetLine(myState.cursorPos.y)
+						myState.currentLine = sb.GetLine(oldLineIndex + 1)
 						showEditorData()
 						//fmt.Println(sbGetBufferLength())
 						//myState.currentLine = sbGetLine(myState.cursorPos.y)
