@@ -115,9 +115,20 @@ func moveCursorY(num int, fn func(int)) {
 	if currentLineIndex == 0 {
 		// trying to go up in the file, load lines from above if any
 		sb.LoadLine(UP, myState.currentLine.Index)
-		if myState.currentLine.Prev != nil {
-			myState.currentLine = myState.currentLine.Prev
+
+		currentLine = myState.currentLine
+		nextLine = sb.GetLine(currentLine.Index + num) // Get the previous node
+
+		if nextLine == nil {
+			return
 		}
+
+		if nextLine.Length < currentLine.Length {
+			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
+			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
+		}
+
+		myState.currentLine = nextLine
 
 	} else if currentLineIndex > 0 && currentLineIndex < sb.DefaultHeight {
 		currentLine = myState.currentLine
@@ -142,9 +153,20 @@ func moveCursorY(num int, fn func(int)) {
 	} else if currentLineIndex == sb.DefaultHeight {
 		// load the lines to bottom
 		sb.LoadLine(DOWN, myState.currentLine.Index)
-		if myState.currentLine.Next != nil {
-			myState.currentLine = myState.currentLine.Next
+
+		currentLine = myState.currentLine
+		nextLine = sb.GetLine(currentLine.Index + num)
+
+		if nextLine == nil {
+			return
 		}
+
+		if nextLine.Length < currentLine.Length {
+			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
+			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
+		}
+
+		myState.currentLine = nextLine
 	}
 	showEditorData()
 }

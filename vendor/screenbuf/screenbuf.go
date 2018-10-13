@@ -689,7 +689,7 @@ func sbEnqueueLine(buffer *ScreenBuffer, line []byte, where int) {
 	case DOWN:
 		var temp = &BufferNode{}
 		temp.Index = buffer.Length + 1
-		temp.Line = string(line)
+		temp.Line = strings.Trim(string(line), "\n")
 		temp.RealLine = buffer.PackTabs(temp.Line)
 		temp.Length = len(temp.RealLine)
 		temp.Prev = traveler
@@ -733,11 +733,12 @@ func reprintBufferWindow(sb *ScreenBuffer) {
 	for traveler := sb.GetLine(sb.IndexOfFirstVisibleLine);
 	traveler != nil && traveler.Index <= sb.IndexOfLastVisisbleLine; traveler = traveler.Next {
 		easyterm.CursorPos(i,1)
-		if traveler.Next != nil {
+		fmt.Printf("%s", traveler.Line)
+		/*if traveler.Next != nil {
 			fmt.Printf("%s\n", traveler.Line)
 		} else {
 			fmt.Printf("%s", traveler.Line)
-		}		
+		}*/		
 		i++
 	}
 	easyterm.ShowCursor(true)
