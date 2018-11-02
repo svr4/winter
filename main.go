@@ -515,8 +515,8 @@ func handleArguments(args []string) (*File, error) {
 			myState.filePath = "./"
 		}
 		//pwd, _ := os.Getwd()
-		if _, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
-			if file, err := os.Open(myState.filePath + "/" + myState.fileName); err == nil {
+		if fileInfo, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
+			if file, err := os.OpenFile(myState.filePath + "/" + myState.fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
 				// Found the file, lets load it after
 				return file, nil
 	
@@ -565,7 +565,10 @@ func main() {
 			sb = screenbuf.NewScreenBuffer(nil)
 			sb.LoadFile()
 		} else {
+			fmt.Print("-winter: ")
 			fmt.Println(err)
+			easyterm.CursorPos(2,1)
+			easyterm.End()
 			os.Exit(1)
 		}
 	}

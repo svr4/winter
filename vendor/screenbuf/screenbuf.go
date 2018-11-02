@@ -141,8 +141,8 @@ func (buffer *ScreenBuffer) LoadFile() {
 	for i := 1; i < buffer.DefaultHeight; i ++ {
 		lineBytes, err := sbReadLine(buffer.Blockman); // Send blockmanager to read
 		// fmt.Print(err)
-		// 	easyterm.End()
-		// 	os.Exit(1)
+		// easyterm.End()
+		// os.Exit(1)
 		//easyterm.CursorPos(1,1)
 		//fmt.Print(string(lineBytes))
 		//fmt.Print(err)
@@ -184,38 +184,45 @@ func (buffer *ScreenBuffer) LoadFile() {
 				traveler = traveler.Next
 				buffer.Length++
 			}
-		} else if err == io.EOF && len(lineBytes) > 0 {
-			temp = &BufferNode{}
-			temp.Index = i
-			temp.Line = ""
-			for err == io.EOF && len(lineBytes) > 0 {
-				temp.Line += string(lineBytes)
-				lineBytes, err = sbReadLine(buffer.Blockman);
-			}
-			if err == nil && len(lineBytes) > 0 {
-				temp.Line += string(lineBytes)
-			}
-			temp.Line = strings.Trim(temp.Line, "\n")
-			temp.Line = strings.Trim(temp.Line, "\000") // remove null termination from EOF
-			temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
-			temp.Length = len(temp.RealLine)
-			if i == 1 {
-				temp.Prev = nil
-				temp.Next = nil
-				buffer.Head = temp
-				traveler = buffer.Head
-			} else {
-				temp.Prev = traveler
-				temp.Next = nil
-				traveler.Next = temp
-				traveler = traveler.Next
-			}
+		} else {
+			break
+		} 
+		
+		//else if err == io.EOF && len(lineBytes) > 0 {
+		// 	temp = &BufferNode{}
+		// 	temp.Index = i
+		// 	temp.Line = ""
+		// 	for err == io.EOF && len(lineBytes) > 0 {
+		// 		temp.Line += string(lineBytes)
+		// 		lineBytes, err = sbReadLine(buffer.Blockman);
+		// 	}
+		// 	if err == nil && len(lineBytes) > 0 {
+		// 		temp.Line += string(lineBytes)
+		// 	}
+		// 	temp.Line = strings.Trim(temp.Line, "\n")
+		// 	temp.Line = strings.Trim(temp.Line, "\000") // remove null termination from EOF
+		// 	temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
+		// 	temp.Length = len(temp.RealLine)
+		// 	if i == 1 {
+		// 		temp.Prev = nil
+		// 		temp.Next = nil
+		// 		buffer.Head = temp
+		// 		traveler = buffer.Head
+		// 	} else {
+		// 		temp.Prev = traveler
+		// 		temp.Next = nil
+		// 		traveler.Next = temp
+		// 		traveler = traveler.Next
+		// 	}
 			
-			buffer.Length++
-		} else if err != io.EOF {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		// 	buffer.Length++
+		// } else if err != io.EOF {
+		// 	fmt.Print("-winter: ")
+		// 	fmt.Println(err)
+		// 	easyterm.CursorPos(2,1)
+		// 	easyterm.End()
+		// 	os.Exit(1)
+		// }
 	}
 	buffer.IndexOfLastVisisbleLine = buffer.Length
 }
@@ -588,74 +595,38 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 				}
 				newFile.Close()
 				sb.Dirty = false
+				sb.isNewFile = false
 				easyterm.CursorPos(sb.DefaultHeight, 1)
 				fmt.Printf("Saved file: %v. Bytes Written: %v", path + "/" + fileName, bytesWritten)
 			}
 		}
 	} else if sb.Dirty {
 		// Not a new file
-		// Make a temp file, write buffer data
-		if temp, err := os.OpenFile(path + "/." + editorFileName + "Temp", os.O_RDWR | os.O_CREATE, 0644); err == nil {
-			tfw := bufio.NewWriter(temp)
-			var bytesWritten int = 0
-			var line string
-			for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
-				line = traveler.Line
-				if traveler.Next != nil {
-						line += "\n"
-				}
-				bw, _ := tfw.WriteString(traveler.Line)
-				bytesWritten += bw
-				tfw.Flush()
+		var line string
+		var bytesWritten int = 0
+		for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
+			line = traveler.Line
+			if traveler.Next != nil {
+				line += "\n"
 			}
-			var bw int = 0
-			var werr error
-			var newLine byte = '\n'
-			// Then write rest of data from the original to the new one
-			for dataRead, rerr := sb.Blockman.Read(); rerr == nil || (rerr == io.EOF && len(dataRead) > 0); dataRead, rerr = sb.Blockman.Read() {
-				if (rerr == io.EOF) {
-					bw, werr = tfw.WriteString(strings.Trim(string(dataRead), "\000"))
-					tfw.Flush()
-					if werr == nil {
-						bytesWritten += bw
-					}
-				} else {
-					bw, werr = tfw.Write(dataRead)
-					if werr == nil {
-						bytesWritten += bw
-					}
-					werr = tfw.WriteByte(newLine)
-					tfw.Flush()
-					if werr == nil {
-						bytesWritten += 1
-					}
-				}
+			n, err := sb.Blockman.Write([]byte(line))
+			if err == nil {
+				bytesWritten += n
+			} else {
+				fmt.Print("-winter: ")
+				fmt.Println(err)
+				easyterm.CursorPos(2,1)
+				easyterm.End()
+				os.Exit(1)
 			}
-			// Write the contents of temp into the original file
-			temp.Seek(0,0) // Reset for reading
-			sb.FilePtr.Seek(0,0) // Reset for writing
-			//tempBuffer := bytes.NewBuffer(make([]byte, os.Getpagesize()))
-			tfr := bufio.NewReader(temp)
-			origFr := bufio.NewWriter(sb.FilePtr)
-			// Writes the contents of the reader to the writer which writes to the file, no buffering
-			_, werr = tfr.WriteTo(origFr)
-			if werr == nil {
-				origFr.Flush()
-			}
-			sb.FilePtr.Seek(sb.Blockman.BytesRead(), 0) // Restore reading pointer location
-			// for br, rerr := tfr.Read(tempBuffer.Bytes()); br > 0 && rerr != io.EOF; br, rerr = tfr.Read(tempBuffer.Bytes()) {
-			// 	_, werr = tempBuffer.WriteTo(origFr)
-			// 	if werr == nil {
-			// 		origFr.Flush()
-			// 	}
-			// }
-			sb.Dirty = false
-			temp.Close()
-			// Get rid of temp
-			os.Remove(path + "/." + editorFileName + "Temp")
-			easyterm.CursorPos(sb.DefaultHeight, 1)
-			fmt.Printf("Saved file: %v. Bytes Written: %v", path + "/" + editorFileName, bytesWritten)
 		}
+		//n, _ := sb.Blockman.Write([]byte(line))
+		// bytesWritten += n
+		// easyterm.Clear()
+		sb.Blockman.Flush()
+		sb.Dirty = false
+		easyterm.CursorPos(sb.DefaultHeight, 1)
+		fmt.Printf("Saved file: %v. Bytes Written: %v", path + "/" + editorFileName, bytesWritten)
 	}
 }
 
