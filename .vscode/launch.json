@@ -9,6 +9,7 @@
             "type": "go",
             "request": "launch",
             "mode": "remote",
+            "apiVersion": 1,
             "remotePath": "${workspaceRoot}",
             "port": 62345,
             "host": "127.0.0.1",
