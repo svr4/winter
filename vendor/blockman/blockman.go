@@ -116,7 +116,7 @@ func (bm *BlockMan) Write(p []byte) (int, error) {
 	//var bw int
 	// Length available after write
 	var bytesLeft int = (os.Getpagesize() - bm.writingBuffer.Len()) - len(p)
-	if bytesLeft <= os.Getpagesize() {
+	if bytesLeft >= 0 {
 		n, err := bm.writingBuffer.Write(p)
 		if err != nil {
 			return n, err
@@ -124,25 +124,37 @@ func (bm *BlockMan) Write(p []byte) (int, error) {
 		return n, nil
 	} else {
 		// We have a remainder only write part of if
+		s, serr := bm.getFileSize();
+		// Error getting the file size
+		if serr != nil {
+			return 0, serr
+		}
+		var (
+			data []byte
+			derr error
+		)
+		if (bm.totalBytesWritten + int64(os.Getpagesize())) <= s {
+			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
+			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+		} else {
+			// file needs to grow via ftruncate
+			unix.Ftruncate(int(bm.file.Fd()), (s + int64(bm.writingBuffer.Len())))
 
-		data, derr := unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
-			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED);
+			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
+			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+		}
 
 		if derr == nil {
 			
-			n := copy(data, bm.writingBuffer.Bytes()[:os.Getpagesize()])
+			n := copy(data, bm.writingBuffer.Bytes()[:])
 			// Sum what was written with what is remaining that will be flushed next
-			bm.totalBytesWritten += int64(n + len(p))
+			bm.totalBytesWritten += int64(n)
 			// underlying []byte will be emptied
 			bm.writingBuffer.Reset()
 			// write remainder
 			unix.Msync(data, unix.MS_ASYNC | unix.MS_INVALIDATE)
 			unix.Munmap(data) // Close mmap
-			bm.writingBuffer.Write(p)
-			ferr := bm.Flush()
-			if ferr != nil {
-				return n, ferr
-			}
+			bm.writingBuffer.Write(p) // write remainder
 			return n, nil
 		}
 		return 0, derr
@@ -159,10 +171,27 @@ func (bm *BlockMan) Flush() error {
 		}
 	}
 
-	if bm.writingBuffer.Len() > 0 && bm.writingBuffer.Len() <= os.Getpagesize() {
+	s, serr := bm.getFileSize();
+		// Error getting the file size
+	if serr != nil {
+		return serr
+	}
+	var (
+		data []byte
+		derr error
+	)
+	if bm.writingBuffer.Len() > 0 {
 
-		data, derr := unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
+		if (bm.totalBytesWritten + int64(os.Getpagesize())) <= s {
+			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
 			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED);
+		} else {
+			// file needs to grow via ftruncate
+			unix.Ftruncate(int(bm.file.Fd()), (s + int64(bm.writingBuffer.Len())))
+
+			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
+			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+		}
 
 		if derr == nil {
 			copy(data, bm.writingBuffer.Bytes()[:])
@@ -185,8 +214,22 @@ func (bm *BlockMan) BytesRead() int64 {
 
 func loadBlock(bm *BlockMan) error {
 
-	data, derr := unix.Mmap(int(bm.file.Fd()), bm.TotalBytesRead, os.Getpagesize(),
+	s, serr := bm.getFileSize()
+	if serr != nil {
+		return serr
+	}
+	var (
+		data []byte
+		derr error
+	)
+
+	if (bm.TotalBytesRead + int64(os.Getpagesize())) <= s {
+		data, derr = unix.Mmap(int(bm.file.Fd()), bm.TotalBytesRead, os.Getpagesize(),
 		unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+	} else {
+		data, derr = unix.Mmap(int(bm.file.Fd()), bm.TotalBytesRead, int(s - bm.TotalBytesRead),
+		unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+	}
 
 	if derr == nil {
 		//buffer := bytes.NewBuffer(make([]byte, bm.blockSize))
@@ -196,7 +239,6 @@ func loadBlock(bm *BlockMan) error {
 		bm.ammountReadInLoadedBlock = 0
 		return nil
 	}
-
 	return derr
 }
 
@@ -217,5 +259,14 @@ func readHelper(bm *BlockMan) ([]byte, error) {
 }
 
 func close(bm *BlockMan) {
+	unix.Msync(bm.loadedBlock, unix.MS_ASYNC | unix.MS_INVALIDATE)
 	unix.Munmap(bm.loadedBlock)
+}
+
+func (bm *BlockMan) getFileSize() (int64, error) {
+	stat, err := bm.file.Stat()
+	if err == nil {
+		return stat.Size(), nil
+	}
+	return -1, err
 }
