@@ -4,6 +4,9 @@
 
 ### Now in beta!
 
+### Supported Platforms:
+* macOS (Sierra 10.13+)
+
 Winter is a text editor written in Go inspired by [Antirez](https://github.com/antirez)'s [kilo](https://github.com/antirez/kilo) when I first saw it years ago. Winter is a very basic text editor and is very much a work in progress.
 
 Features yet to implement are:
