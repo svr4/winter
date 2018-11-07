@@ -2,36 +2,58 @@ package easyterm
 
 
 import (
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/unix"
 	"fmt"
 	"strconv"
-	"os"
 )
 /* Alias for type  */
-type State = terminal.State
+type Termios = unix.Termios
 
 /* Global State */
 var (
-	terminalState *State
+	terminalState = &Termios{}
 	err error
 )
 
 
 func Init() {
 	/* Put terminal in raw mode */
-	terminalState, err = terminal.MakeRaw(0)
+	var err error
+	terminalState, err = unix.IoctlGetTermios(unix.Stdin, unix.TIOCGETA)
 	if err != nil {
+		panic(err)
+	}
+
+	// IT'S A STRUCT!
+	var tempState = &Termios{}
+	*tempState = *terminalState
+
+	tempState.Iflag &^= (unix.IGNBRK | unix.PARMRK | unix.INLCR | unix.IGNCR | unix.BRKINT | unix.ICRNL | unix.INPCK | unix.ISTRIP | unix.IXON)
+	tempState.Oflag &^= unix.OPOST
+	tempState.Cflag &^= (unix.CSIZE | unix.PARENB)
+	tempState.Cflag |= unix.CS8
+	tempState.Lflag &^= (unix.ECHO | unix.ECHONL | unix.ICANON | unix.IEXTEN | unix.ISIG)
+	tempState.Cc[unix.VMIN] = 1
+	tempState.Cc[unix.VTIME] = 0
+
+	err2 := unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, tempState)
+	
+	if err2 != nil {
 		panic(err)
 	}
 
 }
 
 func End() {
-	terminal.Restore(0, terminalState)
+	unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, terminalState)
 }
 
 func GetSize() (width, height int, err error) {
-	return terminal.GetSize(int(os.Stdout.Fd()))
+	winSize, err := unix.IoctlGetWinsize(unix.Stdout, unix.TIOCGWINSZ)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(winSize.Col), int(winSize.Row), nil
 }
 
 func CursorUp(rows int) {
@@ -80,4 +102,12 @@ func ClearFromCursor() {
 
 func ClearLine() {
 	fmt.Print("\033[2K")
+}
+
+func ShowCursor(show bool) {
+	if show {
+		fmt.Print("\033[?25h")
+	} else {
+		fmt.Print("\033[?25l")
+	}
 }
