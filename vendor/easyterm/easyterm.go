@@ -3,13 +3,11 @@ package easyterm
 
 import (
 	"golang.org/x/sys/unix"
-	"github.com/pkg/term/termios"
-	"syscall"
 	"fmt"
 	"strconv"
 )
 /* Alias for type  */
-type Termios = syscall.Termios
+type Termios = unix.Termios
 
 /* Global State */
 var (
@@ -20,7 +18,8 @@ var (
 
 func Init() {
 	/* Put terminal in raw mode */
-	err := termios.Tcgetattr(uintptr(unix.Stdin), terminalState)
+	var err error
+	terminalState, err = unix.IoctlGetTermios(unix.Stdin, unix.TIOCGETA)
 	if err != nil {
 		panic(err)
 	}
@@ -34,8 +33,10 @@ func Init() {
 	tempState.Cflag &^= (unix.CSIZE | unix.PARENB)
 	tempState.Cflag |= unix.CS8
 	tempState.Lflag &^= (unix.ECHO | unix.ECHONL | unix.ICANON | unix.IEXTEN | unix.ISIG)
+	tempState.Cc[unix.VMIN] = 1
+	tempState.Cc[unix.VTIME] = 0
 
-	err2 := termios.Tcsetattr(uintptr(unix.Stdin), unix.TCSAFLUSH, tempState)
+	err2 := unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, tempState)
 	
 	if err2 != nil {
 		panic(err)
@@ -44,7 +45,7 @@ func Init() {
 }
 
 func End() {
-	termios.Tcsetattr(uintptr(unix.Stdin), unix.TCSAFLUSH, terminalState)
+	unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, terminalState)
 }
 
 func GetSize() (width, height int, err error) {
