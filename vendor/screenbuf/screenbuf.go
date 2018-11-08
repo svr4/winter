@@ -1,17 +1,18 @@
 package screenbuf
 
 import (
-	"fmt"
-	"easyterm"
-	"bufio"
-	"io"
-	"bytes"
-	"os"
 	"blockman"
+	"bufio"
+	"bytes"
+	"easyterm"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"unsafe"
 	//"strconv"
 )
+
 type Buffer = bytes.Buffer
 type File = os.File
 type ReadWriter = bufio.ReadWriter
@@ -24,40 +25,40 @@ type BlockManError = blockman.BlockManError
 const TAB_SPACE int = 8
 
 const (
-	UP = iota
+	UP    = iota
 	SPLIT = iota
-	DOWN = iota
+	DOWN  = iota
 )
 
 type BufferNode struct {
-	Index int
-	Line string
+	Index    int
+	Line     string
 	RealLine string
-	Length int
-	Next *BufferNode
-	Prev *BufferNode
+	Length   int
+	Next     *BufferNode
+	Prev     *BufferNode
 }
 
 type ScreenBuffer struct {
-	Head *BufferNode
-	Length int
-	MaxSizeInBytes int64
-	FilePtr *File
+	Head                    *BufferNode
+	Length                  int
+	MaxSizeInBytes          int64
+	FilePtr                 *File
 	IndexOfFirstVisibleLine int
 	IndexOfLastVisisbleLine int
-	Blockman *BlockMan
-	DefaultHeight int
-	DefaultWidth int
-	TabFiller string
-	TabSpace int
-	TabStops []int
-	isNewFile bool
-	Dirty bool
+	Blockman                *BlockMan
+	DefaultHeight           int
+	DefaultWidth            int
+	TabFiller               string
+	TabSpace                int
+	TabStops                []int
+	isNewFile               bool
+	Dirty                   bool
 }
 
-func NewScreenBuffer(file *File)(*ScreenBuffer) {
+func NewScreenBuffer(file *File) *ScreenBuffer {
 	var sb = &ScreenBuffer{}
-	sb.Length = 0;
+	sb.Length = 0
 	sb.Dirty = false
 
 	if file != nil {
@@ -68,7 +69,7 @@ func NewScreenBuffer(file *File)(*ScreenBuffer) {
 
 			if gigs := fileInfo.Size() / 1000000000; gigs > 0 {
 				sb.MaxSizeInBytes = int64(gigs / 8) // only one eight of the file
-			} else if megs := fileInfo.Size() / 1000000; megs > 0  { // size in megs or lower
+			} else if megs := fileInfo.Size() / 1000000; megs > 0 { // size in megs or lower
 				sb.MaxSizeInBytes = int64(megs / 6)
 			} else if kilos := fileInfo.Size() / 1000; kilos > 0 {
 				sb.MaxSizeInBytes = int64(kilos / 4)
@@ -99,20 +100,20 @@ func NewScreenBuffer(file *File)(*ScreenBuffer) {
 	}
 
 	sb.TabSpace = TAB_SPACE
-	for i:=0; i < TAB_SPACE - 1; i++ {
-		sb.TabFiller += " "		
+	for i := 0; i < TAB_SPACE-1; i++ {
+		sb.TabFiller += " "
 	}
 	var numOfStops int = (sb.DefaultWidth / sb.TabSpace)
 	sb.TabStops = make([]int, numOfStops)
 
 	var tabIdx int = 0
-	for ii:= 1; ii <= sb.DefaultWidth; ii++ {
-		if ii % sb.TabSpace == 0 {
+	for ii := 1; ii <= sb.DefaultWidth; ii++ {
+		if ii%sb.TabSpace == 0 {
 			if tabIdx < len(sb.TabStops) {
 				sb.TabStops[tabIdx] = ii
 				tabIdx++
 			} else {
-				break;
+				break
 			}
 		}
 	}
@@ -133,13 +134,13 @@ func (buffer *ScreenBuffer) LoadFile() {
 		temp.Prev = nil
 		temp.Next = nil
 		buffer.Head = temp
-		buffer.Length++;
+		buffer.Length++
 		buffer.IndexOfLastVisisbleLine = 1
 		return
 	}
 
-	for i := 1; i < buffer.DefaultHeight; i ++ {
-		lineBytes, err := sbReadLine(buffer.Blockman); // Send blockmanager to read
+	for i := 1; i < buffer.DefaultHeight; i++ {
+		lineBytes, err := sbReadLine(buffer.Blockman) // Send blockmanager to read
 		// fmt.Print(err)
 		// easyterm.End()
 		// os.Exit(1)
@@ -156,7 +157,7 @@ func (buffer *ScreenBuffer) LoadFile() {
 			temp.Prev = nil
 			temp.Next = nil
 			buffer.Head = temp
-			buffer.Length++;
+			buffer.Length++
 			break
 		}
 		// Not at EOF
@@ -169,7 +170,7 @@ func (buffer *ScreenBuffer) LoadFile() {
 				temp.Prev = nil
 				temp.Next = nil
 				buffer.Head = temp
-				buffer.Length++;
+				buffer.Length++
 				traveler = buffer.Head
 			} else {
 				temp = &BufferNode{}
@@ -186,8 +187,8 @@ func (buffer *ScreenBuffer) LoadFile() {
 			}
 		} else {
 			break
-		} 
-		
+		}
+
 		//else if err == io.EOF && len(lineBytes) > 0 {
 		// 	temp = &BufferNode{}
 		// 	temp.Index = i
@@ -214,7 +215,7 @@ func (buffer *ScreenBuffer) LoadFile() {
 		// 		traveler.Next = temp
 		// 		traveler = traveler.Next
 		// 	}
-			
+
 		// 	buffer.Length++
 		// } else if err != io.EOF {
 		// 	fmt.Print("-winter: ")
@@ -237,7 +238,6 @@ func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
 			screenUpReAdjustment(sb)
 		}
 
-
 	case DOWN:
 
 		/*if sb.screenBuffByteSize() >= uintptr(sb.MaxSizeInBytes) {
@@ -247,7 +247,7 @@ func (sb *ScreenBuffer) LoadLine(fromWhere int, currentLineIndex int) {
 		if currentLine.Next == nil {
 			line, err := sbReadLine(sb.Blockman)
 			if err == nil || (err == io.EOF && len(line) > 0) {
-				sbEnqueueLine(sb,line, DOWN)
+				sbEnqueueLine(sb, line, DOWN)
 				screenDownReAdjustment(sb)
 			} else if bmerr, ok := err.(*BlockManError); ok && !bmerr.HasFile() {
 				// if there is no bm in file do nothing
@@ -264,17 +264,17 @@ func (buffer *ScreenBuffer) PrintBuffer() {
 	for traveler := buffer.Head; traveler != nil; traveler = traveler.Next {
 		fmt.Printf("%s\n", traveler.Line)
 		i++
-		easyterm.CursorPos(i,1)
+		easyterm.CursorPos(i, 1)
 	}
 	// Move cursor to next line
-	easyterm.CursorPos(i+1,1)
+	easyterm.CursorPos(i+1, 1)
 
 	// Fill the rest of the screen with ~ if some space available
-	for x:= i; x < buffer.DefaultHeight; x++ {
+	for x := i; x < buffer.DefaultHeight; x++ {
 		fmt.Printf("~\n")
-		easyterm.CursorPos(x,1)
+		easyterm.CursorPos(x, 1)
 	}
-	easyterm.CursorPos(1,1)
+	easyterm.CursorPos(1, 1)
 	easyterm.ShowCursor(true)
 	//fmt.Println("lenght: " + strconv.Itoa(buffer.length))
 }
@@ -327,31 +327,30 @@ func (buffer *ScreenBuffer) GetLine(line int) *BufferNode {
 	return lineNode
 }
 
-func (buffer *ScreenBuffer) ReprintBuffer()  {
+func (buffer *ScreenBuffer) ReprintBuffer() {
 	i := 1
 	easyterm.ShowCursor(false)
 	easyterm.Clear()
-	for traveler := buffer.GetLine(buffer.IndexOfFirstVisibleLine);
-	traveler != nil && traveler.Index <= buffer.IndexOfLastVisisbleLine; traveler = traveler.Next {
+	for traveler := buffer.GetLine(buffer.IndexOfFirstVisibleLine); traveler != nil && traveler.Index <= buffer.IndexOfLastVisisbleLine; traveler = traveler.Next {
 		//easyterm.CursorPos(i,1)
 		//easyterm.ClearLine()
-		easyterm.CursorPos(i,1)
-		fmt.Printf("%s", traveler.Line)
-		// if traveler.Next != nil {
-		// 	fmt.Printf("%s\n", traveler.Line)
-		// } else {
-		// 	fmt.Printf("%s", traveler.Line)
-		// }
+		easyterm.CursorPos(i, 1)
+		//fmt.Printf("%s", traveler.Line)
+		if traveler.Next != nil {
+			fmt.Printf("%s\n", traveler.Line)
+		} else {
+			fmt.Printf("%s", traveler.Line)
+		}
 		//fmt.Printf("%d\n", traveler.index)
 		i++
 	}
 
-	for x:= i; x < buffer.DefaultHeight; x++ {
-		easyterm.CursorPos(i,1)
+	for x := i; x < buffer.DefaultHeight; x++ {
+		easyterm.CursorPos(x, 1)
 		easyterm.ClearLine()
-		easyterm.CursorPos(i,1)
+		easyterm.CursorPos(x, 1)
 		fmt.Printf("~\n")
-		easyterm.CursorPos(x,1)
+		easyterm.CursorPos(x, 1)
 	}
 	easyterm.ShowCursor(true)
 }
@@ -368,76 +367,76 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 	var insertWhere = manageNewLineString(column, traveler.Length)
 	//fmt.Printf("%d\n",insertWhere)
 	switch insertWhere {
-		case UP:
-			var prev *BufferNode
-			prev = traveler.Prev
-			//temp.index = traveler.index
-			temp.Next = traveler
-			if prev != nil {
-				temp.Prev = prev
-				prev.Next = temp
-			} else {
-				temp.Prev = nil
-			}
-			traveler.Prev = temp
-			if traveler.Index == 1 {
-				buffer.Head = temp
-			}
-			//traveler.index += 1
-			buffer.Length += 1
-		case DOWN:
-			var next *BufferNode
-			next = traveler.Next
-			temp.Prev = traveler
-			//temp.index = traveler.index + 1
-			if next != nil {
-				next.Prev = temp
-				temp.Next = next
-			}
-			traveler.Next = temp
-			buffer.Length += 1
-		case SPLIT:
-			var next *BufferNode
-			next = traveler.Next
-			temp.Prev = traveler
-			if next != nil {
-				next.Prev = temp
-				temp.Next = next
-			}
-			traveler.Next = temp
-			buffer.Length += 1
-			// Split text
-			origText := make([]rune, traveler.Length)
-			// Copy original text to origText
-			copy(origText, []rune(traveler.RealLine))
-			// New original lines text
-			origRune := make([]rune, len(origText[0:(column - 1)]))
-			// Copying original lines new text to rune
-			copy(origRune, origText[0:column - 1])
-			// slice with new line text
-			newRune := origText[(column - 1):traveler.Length]
-			newText := make([]rune, len(newRune))
-			copy(newText, newRune)
-			// set the string on the new line
-			temp.Line = buffer.UnpackTabs(string(newText))
-			temp.RealLine = buffer.PackTabs(temp.Line)
-			temp.Length = len(temp.RealLine)
+	case UP:
+		var prev *BufferNode
+		prev = traveler.Prev
+		//temp.index = traveler.index
+		temp.Next = traveler
+		if prev != nil {
+			temp.Prev = prev
+			prev.Next = temp
+		} else {
+			temp.Prev = nil
+		}
+		traveler.Prev = temp
+		if traveler.Index == 1 {
+			buffer.Head = temp
+		}
+		//traveler.index += 1
+		buffer.Length += 1
+	case DOWN:
+		var next *BufferNode
+		next = traveler.Next
+		temp.Prev = traveler
+		//temp.index = traveler.index + 1
+		if next != nil {
+			next.Prev = temp
+			temp.Next = next
+		}
+		traveler.Next = temp
+		buffer.Length += 1
+	case SPLIT:
+		var next *BufferNode
+		next = traveler.Next
+		temp.Prev = traveler
+		if next != nil {
+			next.Prev = temp
+			temp.Next = next
+		}
+		traveler.Next = temp
+		buffer.Length += 1
+		// Split text
+		origText := make([]rune, traveler.Length)
+		// Copy original text to origText
+		copy(origText, []rune(traveler.RealLine))
+		// New original lines text
+		origRune := make([]rune, len(origText[0:(column-1)]))
+		// Copying original lines new text to rune
+		copy(origRune, origText[0:column-1])
+		// slice with new line text
+		newRune := origText[(column - 1):traveler.Length]
+		newText := make([]rune, len(newRune))
+		copy(newText, newRune)
+		// set the string on the new line
+		temp.Line = buffer.UnpackTabs(string(newText))
+		temp.RealLine = buffer.PackTabs(temp.Line)
+		temp.Length = len(temp.RealLine)
 
-			// update the old lines text
-			traveler.Line = buffer.UnpackTabs(string(origRune))
-			traveler.RealLine = buffer.PackTabs(traveler.Line)
-			traveler.Length = len(traveler.RealLine)
+		// update the old lines text
+		traveler.Line = buffer.UnpackTabs(string(origRune))
+		traveler.RealLine = buffer.PackTabs(traveler.Line)
+		traveler.Length = len(traveler.RealLine)
 
-			/*traveler.line = string(origText[0:column])
-			traveler.length = len(traveler.line)*/
+		/*traveler.line = string(origText[0:column])
+		traveler.length = len(traveler.line)*/
 	}
 
 	buffer.UpdateBufferIndexes()
-	// if buffer.Length < buffer.DefaultHeight {
-	// 	buffer.IndexOfLastVisisbleLine = buffer.Length
-	// } else {
-	// 	buffer.IndexOfLastVisisbleLine = buffer.DefaultHeight
-	// }
+	if buffer.Length < buffer.DefaultHeight {
+		buffer.IndexOfLastVisisbleLine = buffer.Length
+	} else if buffer.Length > buffer.DefaultHeight {
+		screenDownReAdjustment(buffer)
+	}
 	buffer.ReprintBuffer()
 	//easyterm.CursorPos(line,column)
 }
@@ -445,7 +444,7 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 func (sb *ScreenBuffer) NextTabStop(index int) int {
 	var tabStopsLen = len(sb.TabStops)
 	var nextStop int = 0
-	for i:=0; i < tabStopsLen; i ++ {
+	for i := 0; i < tabStopsLen; i++ {
 		if (i + 1) < tabStopsLen {
 			if index < sb.TabStops[i] {
 				nextStop = sb.TabStops[i]
@@ -453,8 +452,8 @@ func (sb *ScreenBuffer) NextTabStop(index int) int {
 			} else if index == sb.TabStops[i] {
 				nextStop = sb.TabStops[i+1]
 				break
-			} else if index > sb.TabStops[i] && index < sb.TabStops[i + 1] {
-				nextStop = sb.TabStops[i + 1]
+			} else if index > sb.TabStops[i] && index < sb.TabStops[i+1] {
+				nextStop = sb.TabStops[i+1]
 				break
 			}
 		}
@@ -465,11 +464,11 @@ func (sb *ScreenBuffer) NextTabStop(index int) int {
 func (sb *ScreenBuffer) PrevTabStop(index int) int {
 	var tabStopsLen = len(sb.TabStops)
 	var prevStop int = 0
-	for i:=tabStopsLen - 1; i >= 0; i-- {
+	for i := tabStopsLen - 1; i >= 0; i-- {
 		// Could be used to better the NextTabStop search
 		if (i - 1) >= 0 {
 			if index >= sb.TabStops[i] {
-				prevStop = sb.TabStops[i - 1]
+				prevStop = sb.TabStops[i-1]
 				break
 			}
 		}
@@ -478,7 +477,7 @@ func (sb *ScreenBuffer) PrevTabStop(index int) int {
 }
 
 func (sb *ScreenBuffer) IsATabStop(index int) bool {
-	for i:=0; i < len(sb.TabStops); i++ {
+	for i := 0; i < len(sb.TabStops); i++ {
 		if sb.TabStops[i] == index {
 			return true
 		}
@@ -494,16 +493,16 @@ func (sb *ScreenBuffer) PackTabs(line string) string {
 
 	var workingFiller []rune
 	var firstHalf, secondHalf []rune
-	
-	for i:=0; i < len(origString); i++ {
+
+	for i := 0; i < len(origString); i++ {
 		if origString[i] == '\t' {
 
 			nextStop = sb.NextTabStop(i)
 
-			for ii:=i; ii < nextStop - 1; ii++ {
+			for ii := i; ii < nextStop-1; ii++ {
 				filler += " "
 			}
-			
+
 			workingFiller = make([]rune, len(filler))
 			copy(workingFiller, []rune(filler))
 
@@ -516,17 +515,17 @@ func (sb *ScreenBuffer) PackTabs(line string) string {
 			} else {
 				secondHalf = make([]rune, 0)
 			}
-			
+
 			newLine := string(firstHalf) + "\t" + string(workingFiller) + string(secondHalf)
 			origString = make([]rune, len(newLine))
 			copy(origString, []rune(newLine))
-			
+
 			i += len(workingFiller)
 			filler = ""
 		}
 	}
 	return string(origString)
-	
+
 }
 
 func (sb *ScreenBuffer) UnpackTabs(line string) string {
@@ -536,16 +535,16 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 
 	var firstHalf, secondHalf []rune
 
-	for i:=len(origString) - 1; i >= 0 ; i-- {
+	for i := len(origString) - 1; i >= 0; i-- {
 		if origString[i] == '\t' {
-			
+
 			nextStop = sb.NextTabStop(i)
-			
+
 			if nextStop > len(origString) || len(origString[i:nextStop]) == 0 {
 				continue
 			} else {
-				var tabFill []rune = origString[i+1:nextStop]
-				if (!strings.Contains(string(tabFill), " ")){
+				var tabFill []rune = origString[i+1 : nextStop]
+				if !strings.Contains(string(tabFill), " ") {
 					continue
 				}
 			}
@@ -563,7 +562,7 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 		}
 	}
 	return string(origString)
-	
+
 }
 
 func (sb *ScreenBuffer) Save(editorFileName, path string) {
@@ -580,14 +579,14 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 			fileName = editorFileName
 		}
 		if len(fileName) > 0 {
-			if newFile, err := os.OpenFile(path + "/" + fileName, os.O_WRONLY | os.O_CREATE, 0666); err == nil {
+			if newFile, err := os.OpenFile(path+"/"+fileName, os.O_WRONLY|os.O_CREATE, 0666); err == nil {
 				fw := bufio.NewWriter(newFile)
 				var bytesWritten int = 0
 				var line string
 				for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
 					line = traveler.Line
 					if traveler.Next != nil {
-							line += "\n"
+						line += "\n"
 					}
 					bw, _ := fw.WriteString(line)
 					bytesWritten += bw
@@ -597,7 +596,7 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 				sb.Dirty = false
 				sb.isNewFile = false
 				easyterm.CursorPos(sb.DefaultHeight, 1)
-				fmt.Printf("Saved file: %v. Bytes Written: %v", path + "/" + fileName, bytesWritten)
+				fmt.Printf("Saved file: %v. Bytes Written: %v", path+"/"+fileName, bytesWritten)
 			}
 		}
 	} else if sb.Dirty {
@@ -615,7 +614,7 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 			} else {
 				fmt.Print("-winter: ")
 				fmt.Println(err)
-				easyterm.CursorPos(2,1)
+				easyterm.CursorPos(2, 1)
 				easyterm.End()
 				os.Exit(1)
 			}
@@ -626,7 +625,7 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 		sb.Blockman.Flush()
 		sb.Dirty = false
 		easyterm.CursorPos(sb.DefaultHeight, 1)
-		fmt.Printf("Saved file: %v. Bytes Written: %v", path + "/" + editorFileName, bytesWritten)
+		fmt.Printf("Saved file: %v. Bytes Written: %v", path+"/"+editorFileName, bytesWritten)
 	}
 }
 
@@ -686,7 +685,7 @@ func hasNodeAtIndex(sb *ScreenBuffer, index int) bool {
 	return containsIndex
 }
 
-func (sb *ScreenBuffer) screenBuffByteSize () uintptr {
+func (sb *ScreenBuffer) screenBuffByteSize() uintptr {
 	var size uintptr = 0
 	for traveler := sb.Head; traveler != nil; traveler = traveler.Next {
 		size += unsafe.Sizeof(traveler.RealLine)
@@ -702,15 +701,14 @@ func reprintBufferWindow(sb *ScreenBuffer) {
 	i := 1
 	easyterm.ShowCursor(false)
 	easyterm.Clear()
-	for traveler := sb.GetLine(sb.IndexOfFirstVisibleLine);
-	traveler != nil && traveler.Index <= sb.IndexOfLastVisisbleLine; traveler = traveler.Next {
-		easyterm.CursorPos(i,1)
+	for traveler := sb.GetLine(sb.IndexOfFirstVisibleLine); traveler != nil && traveler.Index <= sb.IndexOfLastVisisbleLine; traveler = traveler.Next {
+		easyterm.CursorPos(i, 1)
 		fmt.Printf("%s", traveler.Line)
 		/*if traveler.Next != nil {
 			fmt.Printf("%s\n", traveler.Line)
 		} else {
 			fmt.Printf("%s", traveler.Line)
-		}*/		
+		}*/
 		i++
 	}
 	easyterm.ShowCursor(true)
@@ -773,48 +771,48 @@ func handleSavePrompt(sb *ScreenBuffer) string {
 
 				letter := buffer[0]
 				switch {
-					case letter == 13:
-						// Enter
-						if len(fileName) > 0 {
-							easyterm.CursorPos(sb.DefaultHeight, 1)
-							easyterm.ClearLine()
-							esc = true
-						}
-					case letter == 127:
-						// Backspace
-						if len(fileName) > 0 {
-							var workingFn []rune = make([]rune, len(fileName) - 1)
-							copy(workingFn, []rune(fileName[0:len(fileName) - 1]))
-							fileName = string(workingFn)
-							easyterm.CursorPos(sb.DefaultHeight, 1)
-							easyterm.ClearLine()
-							fmt.Print(savePromt)
-							fmt.Print(fileName)
-						}
-				  case letter == 27:
-						// Do Nothing for Esc for now
+				case letter == 13:
+					// Enter
+					if len(fileName) > 0 {
 						easyterm.CursorPos(sb.DefaultHeight, 1)
 						easyterm.ClearLine()
-						fileName = ""
 						esc = true
-					case letter == 19:
-						// Ctrl-S
+					}
+				case letter == 127:
+					// Backspace
+					if len(fileName) > 0 {
+						var workingFn []rune = make([]rune, len(fileName)-1)
+						copy(workingFn, []rune(fileName[0:len(fileName)-1]))
+						fileName = string(workingFn)
+						easyterm.CursorPos(sb.DefaultHeight, 1)
+						easyterm.ClearLine()
+						fmt.Print(savePromt)
+						fmt.Print(fileName)
+					}
+				case letter == 27:
+					// Do Nothing for Esc for now
+					easyterm.CursorPos(sb.DefaultHeight, 1)
+					easyterm.ClearLine()
+					fileName = ""
+					esc = true
+				case letter == 19:
+					// Ctrl-S
 
-					case letter == 17:
-						// Ctrl-Q
-						easyterm.Clear()
-						easyterm.CursorPos(1,1)
-						easyterm.End()
-						os.Exit(0)
+				case letter == 17:
+					// Ctrl-Q
+					easyterm.Clear()
+					easyterm.CursorPos(1, 1)
+					easyterm.End()
+					os.Exit(0)
 
-					case letter == 9:
-						// Tab
-					case letter > 0 && letter <= 31:
-						// Do nothing
+				case letter == 9:
+					// Tab
+				case letter > 0 && letter <= 31:
+					// Do nothing
 
-					default:
-						fmt.Print(string(letter))
-						fileName += string(letter)
+				default:
+					fmt.Print(string(letter))
+					fileName += string(letter)
 				}
 
 			}

@@ -1,14 +1,15 @@
 package main
 
 import (
-	"easyterm"
 	"bufio"
-	"os"
+	"easyterm"
 	"fmt"
 	"math"
+	"os"
 	"screenbuf"
 	"strings"
 )
+
 /* Alias ReadWriter */
 type File = os.File
 type ReadWriter = bufio.ReadWriter
@@ -16,10 +17,11 @@ type ScreenBuffer = screenbuf.ScreenBuffer
 type BufferNode = screenbuf.BufferNode
 
 var (
-	UP = screenbuf.UP
+	UP    = screenbuf.UP
 	SPLIT = screenbuf.SPLIT
-	DOWN = screenbuf.DOWN
+	DOWN  = screenbuf.DOWN
 )
+
 type Cursor struct {
 	x int
 	y int
@@ -27,10 +29,10 @@ type Cursor struct {
 
 /* Contains the state of the editor session */
 type WinterState struct {
-	cursorPos Cursor
+	cursorPos   Cursor
 	currentLine *BufferNode
-	fileName string
-	filePath string
+	fileName    string
+	filePath    string
 	//filePtr *File
 }
 
@@ -88,8 +90,8 @@ func setCursorPos(y, x int) {
 func moveCursorX(num int, fn func(int)) {
 	line_length := myState.currentLine.Length
 	// Handling tab movement
-	if ((myState.cursorPos.x - 1) < line_length) {
-		if myState.currentLine.RealLine[myState.cursorPos.x - 1] == '\t' {
+	if (myState.cursorPos.x - 1) < line_length {
+		if myState.currentLine.RealLine[myState.cursorPos.x-1] == '\t' {
 			num *= 8 // Tab
 		}
 	}
@@ -104,8 +106,8 @@ func moveCursorX(num int, fn func(int)) {
 func moveCursorY(num int, fn func(int)) {
 	//buffer_length := sbGetBufferLength()
 	var (
-		currentLine *BufferNode
-		nextLine *BufferNode
+		currentLine      *BufferNode
+		nextLine         *BufferNode
 		currentLineIndex int
 	)
 	currentLineIndex = myState.cursorPos.y + num
@@ -125,7 +127,7 @@ func moveCursorY(num int, fn func(int)) {
 
 		if nextLine.Length < currentLine.Length {
 			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
-			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
+			setCursorPos(myState.cursorPos.y, nextLine.Length+1)
 		}
 
 		myState.currentLine = nextLine
@@ -145,7 +147,7 @@ func moveCursorY(num int, fn func(int)) {
 		if nextLine.Length < currentLine.Length {
 			//easyterm.CursorPos(0,1)
 			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
-			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
+			setCursorPos(myState.cursorPos.y, nextLine.Length+1)
 		}
 
 		myState.currentLine = nextLine
@@ -163,7 +165,7 @@ func moveCursorY(num int, fn func(int)) {
 
 		if nextLine.Length < currentLine.Length {
 			easyterm.CursorPos(myState.cursorPos.y, nextLine.Length)
-			setCursorPos(myState.cursorPos.y, nextLine.Length + 1)
+			setCursorPos(myState.cursorPos.y, nextLine.Length+1)
 		}
 
 		myState.currentLine = nextLine
@@ -207,13 +209,13 @@ func writeTextToBuffer(letter byte) {
 		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 	// middle
 	case myState.cursorPos.x < (myState.currentLine.Length + 1):
-		total := make([]rune, myState.currentLine.Length + 1)
-		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x - 1]))
-		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x - 1]))
+		total := make([]rune, myState.currentLine.Length+1)
+		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-1]))
+		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-1]))
 		secondHalf := make([]rune, len(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 		copy(secondHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
-		copy(total, []rune(string(firstHalf) + string(letter) + string(secondHalf)))
+		copy(total, []rune(string(firstHalf)+string(letter)+string(secondHalf)))
 		myState.currentLine.Line = unpackTabs(string(total))
 		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 	}
@@ -227,7 +229,7 @@ func writeTextToBuffer(letter byte) {
 		easyterm.CursorRight(curpos)
 		updateCursorPosX(curpos - (myState.cursorPos.x - 1))
 	} else {
-		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x + 1)
+		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x+1)
 		updateCursorPosX(1)
 	}
 	showEditorData()
@@ -252,7 +254,7 @@ func backspaceLine() {
 
 	if strings.ContainsRune(myState.currentLine.RealLine[prevTabStop:backSpacePos], 9) {
 		var spacesBack int = 0
-		for i:= myState.cursorPos.x - 1; i >= prevTabStop; i-- {	
+		for i := myState.cursorPos.x - 1; i >= prevTabStop; i-- {
 			if myState.currentLine.RealLine[i] == '\t' {
 				var total []rune
 				var firstHalf []rune
@@ -268,9 +270,9 @@ func backspaceLine() {
 
 					secondHalf := make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
 					copy(secondHalf, []rune(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
-					
+
 					total = make([]rune, (len(firstHalf) + len(secondHalf)))
-					copy(total, []rune(string(firstHalf) + string(secondHalf)))
+					copy(total, []rune(string(firstHalf)+string(secondHalf)))
 				}
 
 				myState.currentLine.Line = unpackTabs(string(total))
@@ -280,7 +282,7 @@ func backspaceLine() {
 				easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 				easyterm.ClearLine()
 				easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-				fmt.Print(myState.currentLine.Line) // write updated line again
+				fmt.Print(myState.currentLine.Line)        // write updated line again
 				easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 
 				easyterm.CursorLeft(spacesBack)
@@ -290,7 +292,6 @@ func backspaceLine() {
 			}
 			spacesBack++ // the amount of spaces to move cursor back if necesary
 		}
-
 
 	}
 
@@ -372,26 +373,31 @@ func backspaceLine() {
 			}
 		}
 		sb.ReprintBuffer() // reprints complete buffer
-		easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
-		setCursorPos(myState.cursorPos.y, myState.currentLine.Length + 1)
+		if myState.cursorPos.y > sb.DefaultHeight {
+			var ypos int = sb.DefaultHeight - (myState.cursorPos.y - sb.DefaultHeight)
+			easyterm.CursorPos(ypos, myState.currentLine.Length+1)
+			setCursorPos(ypos, myState.currentLine.Length+1)
+		} else {
+			easyterm.CursorPos(myState.cursorPos.y, myState.currentLine.Length+1)
+			setCursorPos(myState.cursorPos.y, myState.currentLine.Length+1)
+		}
 		showEditorData()
 		return
 	}
 
-
 	// TODO: single line wrapping handling
 
 	switch {
-		// Between the first and last characters of a line
-	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.Length + 1):
+	// Between the first and last characters of a line
+	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.Length+1):
 
-		total := make([]rune, myState.currentLine.Length - 1)
+		total := make([]rune, myState.currentLine.Length-1)
 		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
 		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
 		secondHalf := make([]rune, len(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 		copy(secondHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
-		copy(total, []rune(string(firstHalf) + string(secondHalf)))
+		copy(total, []rune(string(firstHalf)+string(secondHalf)))
 		myState.currentLine.Line = unpackTabs(string(total))
 		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
 		myState.currentLine.Length = len(myState.currentLine.RealLine)
@@ -400,12 +406,12 @@ func backspaceLine() {
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-		fmt.Print(myState.currentLine.Line) // write updated line again
+		fmt.Print(myState.currentLine.Line)        // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
 		easyterm.CursorLeft(1)
 		updateCursorPosX(-1)
-	
+
 	// At the start of a line
 	case myState.cursorPos.x == 1:
 
@@ -457,7 +463,7 @@ func backspaceLine() {
 			}
 			sb.ReprintBuffer() // reprints complete buffer
 			easyterm.CursorPos(myState.cursorPos.y, origPrevLineLength+1)
-			setCursorPos(myState.cursorPos.y, origPrevLineLength + 1)
+			setCursorPos(myState.cursorPos.y, origPrevLineLength+1)
 			//easyterm.CursorPos(20, 1)
 			//fmt.Print(sbGetBufferLength())
 
@@ -475,7 +481,7 @@ func backspaceLine() {
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
 		easyterm.ClearLine()
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-		fmt.Print(myState.currentLine.Line) // write updated line again
+		fmt.Print(myState.currentLine.Line)        // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
 		easyterm.CursorLeft(1)
@@ -508,18 +514,18 @@ func handleArguments(args []string) (*File, error) {
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
 		fnArr := strings.Split(os.Args[1], "/")
-		myState.fileName = fnArr[len(fnArr) - 1]
+		myState.fileName = fnArr[len(fnArr)-1]
 		if len(fnArr) > 1 {
-			myState.filePath = strings.Join(fnArr[0:len(fnArr) - 1], "/")
+			myState.filePath = strings.Join(fnArr[0:len(fnArr)-1], "/")
 		} else {
 			myState.filePath = "./"
 		}
 		//pwd, _ := os.Getwd()
 		if fileInfo, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
-			if file, err := os.OpenFile(myState.filePath + "/" + myState.fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
+			if file, err := os.OpenFile(myState.filePath+"/"+myState.fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
 				// Found the file, lets load it after
 				return file, nil
-	
+
 			} else {
 				// Something happened, throw error
 				return nil, err
@@ -537,10 +543,10 @@ func main() {
 	/* Terminal in raw mode */
 	easyterm.Init()
 	easyterm.Clear()
-	easyterm.CursorPos(1,1)
+	easyterm.CursorPos(1, 1)
 
 	/* Init my position */
-	myState.cursorPos = Cursor{1,1}
+	myState.cursorPos = Cursor{1, 1}
 
 	/* Reader and Writer to standard in & out */
 	termRW = bufio.NewReadWriter(bufio.NewReader(os.Stdin), bufio.NewWriter(os.Stdout))
@@ -561,13 +567,13 @@ func main() {
 		sb.LoadFile()
 	} else {
 		// If the file doesn't exist or if something went wrong
-		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile(){
+		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile() {
 			sb = screenbuf.NewScreenBuffer(nil)
 			sb.LoadFile()
 		} else {
 			fmt.Print("-winter: ")
 			fmt.Println(err)
-			easyterm.CursorPos(2,1)
+			easyterm.CursorPos(2, 1)
 			easyterm.End()
 			os.Exit(1)
 		}
@@ -623,67 +629,69 @@ func main() {
 				letter := buffer[0]
 				//fmt.Print(letter)
 				switch {
-					case letter == 13:
-						// Enter
-						//easyterm.CursorNextLine(1)
-						//updateCursorPosY(1)
-						var oldLineIndex int = myState.currentLine.Index
-						sb.AddLineToBuffer(myState.currentLine.Index, myState.cursorPos.x)
-						//myState.currentLine = sb.GetLine(newIndex)
-						sb.Dirty = true
+				case letter == 13:
+					// Enter
+					//easyterm.CursorNextLine(1)
+					//updateCursorPosY(1)
+					var oldLineIndex int = myState.currentLine.Index
+					sb.AddLineToBuffer(myState.currentLine.Index, myState.cursorPos.x)
+					//myState.currentLine = sb.GetLine(newIndex)
+					sb.Dirty = true
+					if myState.cursorPos.y < sb.DefaultHeight {
 						updateCursorPosY(1)
-						easyterm.CursorPos(myState.cursorPos.y, 1)
-						setCursorPos(myState.cursorPos.y, 1)
-						myState.currentLine = sb.GetLine(oldLineIndex + 1)
-						showEditorData()
-						//fmt.Println(sbGetBufferLength())
-						//myState.currentLine = sbGetLine(myState.cursorPos.y)
-						//easyterm.CursorPos(myState.cursorPos.y, 1)
-						//myState.currentLine = sbGetLine(myState.cursorPos.y)
-						//fmt.Print(myState.cursorPos.x)
-						//fmt.Print(myState.cursorPos.y)
-					case letter == 127:
-						// Backspace
-						//easyterm.CursorLeft(1)
-						//updateCursorPosX(-1)
-						//easyterm.ClearFromCursor()
-						backspaceLine()
-						sb.Dirty = true
-				  case letter == 27:
-						// Do Nothing for Esc for now
+					}
+					easyterm.CursorPos(myState.cursorPos.y, 1)
+					setCursorPos(myState.cursorPos.y, 1)
+					myState.currentLine = sb.GetLine(oldLineIndex + 1)
+					showEditorData()
+					//fmt.Println(sbGetBufferLength())
+					//myState.currentLine = sbGetLine(myState.cursorPos.y)
+					//easyterm.CursorPos(myState.cursorPos.y, 1)
+					//myState.currentLine = sbGetLine(myState.cursorPos.y)
+					//fmt.Print(myState.cursorPos.x)
+					//fmt.Print(myState.cursorPos.y)
+				case letter == 127:
+					// Backspace
+					//easyterm.CursorLeft(1)
+					//updateCursorPosX(-1)
+					//easyterm.ClearFromCursor()
+					backspaceLine()
+					sb.Dirty = true
+				case letter == 27:
+					// Do Nothing for Esc for now
 
-					case letter == 19:
-						// Save
-						saveFile()
+				case letter == 19:
+					// Save
+					saveFile()
 
-					case letter == 17:
-						// Ctrl-Q
-						easyterm.Clear()
-						easyterm.CursorPos(1,1)
-						easyterm.End()
-						return
+				case letter == 17:
+					// Ctrl-Q
+					easyterm.Clear()
+					easyterm.CursorPos(1, 1)
+					easyterm.End()
+					return
 
-					case letter == 9:
-						// Tab
-						writeTextToBuffer(letter)
-						sb.Dirty = true
-					case letter > 0 && letter <= 31:
-						// Do nothing
+				case letter == 9:
+					// Tab
+					writeTextToBuffer(letter)
+					sb.Dirty = true
+				case letter > 0 && letter <= 31:
+					// Do nothing
 
-					default:
-						//fmt.Print(letter)
-						///fmt.Printf("BytesRead: %d\n", bytesRead)
-						//fmt.Printf("%s", string(letter))
-						//updateCursorPosX(1)
-						writeTextToBuffer(letter)
-						sb.Dirty = true
+				default:
+					//fmt.Print(letter)
+					///fmt.Printf("BytesRead: %d\n", bytesRead)
+					//fmt.Printf("%s", string(letter))
+					//updateCursorPosX(1)
+					writeTextToBuffer(letter)
+					sb.Dirty = true
 				}
 
 			}
 
 		} else {
 			easyterm.Clear()
-			easyterm.CursorPos(1,1)
+			easyterm.CursorPos(1, 1)
 			easyterm.End()
 			return
 		}
