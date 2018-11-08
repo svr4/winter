@@ -1,3 +1,5 @@
+// +build darwin linux
+
 package easyterm
 
 
@@ -19,7 +21,7 @@ var (
 func Init() {
 	/* Put terminal in raw mode */
 	var err error
-	terminalState, err = unix.IoctlGetTermios(unix.Stdin, unix.TIOCGETA)
+	terminalState, err = unix.IoctlGetTermios(unix.Stdin, TCGETATTR)
 	if err != nil {
 		panic(err)
 	}
@@ -36,7 +38,7 @@ func Init() {
 	tempState.Cc[unix.VMIN] = 1
 	tempState.Cc[unix.VTIME] = 0
 
-	err2 := unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, tempState)
+	err2 := unix.IoctlSetTermios(unix.Stdin, TCSETATTR, tempState)
 	
 	if err2 != nil {
 		panic(err)
@@ -45,7 +47,7 @@ func Init() {
 }
 
 func End() {
-	unix.IoctlSetTermios(unix.Stdin, unix.TIOCSETA, terminalState)
+	unix.IoctlSetTermios(unix.Stdin, TCSETATTR, terminalState)
 }
 
 func GetSize() (width, height int, err error) {
