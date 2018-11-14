@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"unsafe"
+	"path/filepath"
 	//"strconv"
 )
 
@@ -58,15 +59,15 @@ type ScreenBuffer struct {
 	FileName                string
 }
 
-func NewScreenBuffer(file *File, path string) *ScreenBuffer {
+func NewScreenBuffer(file *File) *ScreenBuffer {
 	var sb = &ScreenBuffer{}
 	sb.Length = 0
 	sb.Dirty = false
-	sb.FilePath = path
 
 	if file != nil {
 		sb.FilePtr = file
-		sb.FileName = file.Name()
+		sb.FileName = filepath.Base(file.Name())
+		sb.FilePath = filepath.Dir(file.Name())
 		sb.isNewFile = false
 		// Set the max size in bytes to a third of the size of the file or OS page size
 		if fileInfo, errr := sb.FilePtr.Stat(); errr == nil && fileInfo.Size() > 0 {
@@ -88,6 +89,7 @@ func NewScreenBuffer(file *File, path string) *ScreenBuffer {
 		sb.isNewFile = true
 		sb.FilePtr = nil
 		sb.FileName = ""
+		sb.FilePath = "."
 		sb.MaxSizeInBytes = int64(os.Getpagesize())
 	}
 
@@ -190,45 +192,27 @@ func (buffer *ScreenBuffer) LoadFile() {
 				traveler = traveler.Next
 				buffer.Length++
 			}
-		} else {
-			break
+		} else if err == io.EOF && len(lineBytes) > 0 {
+			temp = &BufferNode{}
+			temp.Index = i
+			temp.Line = strings.Trim(string(lineBytes), "\n")
+			temp.Line = strings.Trim(temp.Line, "\n")
+			temp.Line = strings.Trim(temp.Line, "\000") // remove null termination from EOF
+			temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
+			temp.Length = len(temp.RealLine)
+			if i == 1 {
+				temp.Prev = nil
+				temp.Next = nil
+				buffer.Head = temp
+				traveler = buffer.Head
+			} else {
+				temp.Prev = traveler
+				temp.Next = nil
+				traveler.Next = temp
+				traveler = traveler.Next
+			}
+			buffer.Length++
 		}
-
-		//else if err == io.EOF && len(lineBytes) > 0 {
-		// 	temp = &BufferNode{}
-		// 	temp.Index = i
-		// 	temp.Line = ""
-		// 	for err == io.EOF && len(lineBytes) > 0 {
-		// 		temp.Line += string(lineBytes)
-		// 		lineBytes, err = sbReadLine(buffer.Blockman);
-		// 	}
-		// 	if err == nil && len(lineBytes) > 0 {
-		// 		temp.Line += string(lineBytes)
-		// 	}
-		// 	temp.Line = strings.Trim(temp.Line, "\n")
-		// 	temp.Line = strings.Trim(temp.Line, "\000") // remove null termination from EOF
-		// 	temp.RealLine = buffer.PackTabs(temp.Line) // pad with 8 spaces the line
-		// 	temp.Length = len(temp.RealLine)
-		// 	if i == 1 {
-		// 		temp.Prev = nil
-		// 		temp.Next = nil
-		// 		buffer.Head = temp
-		// 		traveler = buffer.Head
-		// 	} else {
-		// 		temp.Prev = traveler
-		// 		temp.Next = nil
-		// 		traveler.Next = temp
-		// 		traveler = traveler.Next
-		// 	}
-
-		// 	buffer.Length++
-		// } else if err != io.EOF {
-		// 	fmt.Print("-winter: ")
-		// 	fmt.Println(err)
-		// 	easyterm.CursorPos(2,1)
-		// 	easyterm.End()
-		// 	os.Exit(1)
-		// }
 	}
 	buffer.IndexOfLastVisisbleLine = buffer.Length
 }
@@ -360,7 +344,7 @@ func (buffer *ScreenBuffer) ReprintBuffer() {
 	easyterm.ShowCursor(true)
 }
 
-func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
+func (buffer *ScreenBuffer) AddLineToBuffer(line, column, row int) {
 
 	traveler := buffer.GetLine(line)
 	var temp = &BufferNode{}
@@ -439,8 +423,11 @@ func (buffer *ScreenBuffer) AddLineToBuffer(line, column int) {
 	buffer.UpdateBufferIndexes()
 	if buffer.Length < buffer.DefaultHeight {
 		buffer.IndexOfLastVisisbleLine = buffer.Length
-	} else if buffer.Length > buffer.DefaultHeight {
-		screenDownReAdjustment(buffer)
+	} else {
+		// Using row instead of line or buffer length because those values can be > DefaultHeight
+		if row >= (buffer.DefaultHeight - 1) {
+			screenDownReAdjustment(buffer)
+		}
 	}
 	buffer.ReprintBuffer()
 	//easyterm.CursorPos(line,column)

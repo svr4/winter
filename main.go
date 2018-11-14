@@ -32,8 +32,6 @@ type Cursor struct {
 type WinterState struct {
 	cursorPos   Cursor
 	currentLine *BufferNode
-	fileName    string
-	filePath    string
 	//filePtr *File
 }
 
@@ -506,19 +504,20 @@ func saveFile() {
 
 // TODO: When the file is new or temp, don't actually create the file until it's saved by user
 func handleArguments(args []string) (*File, error) {
-
+	var (
+		fileName string
+		filePath string
+	)
 	switch len(args) {
 
 	case 1:
-		myState.fileName = ""
-		myState.filePath = "."
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
-		myState.fileName = filepath.Base(os.Args[1])
-		myState.filePath = filepath.Dir(os.Args[1])
+		fileName = filepath.Base(os.Args[1])
+		filePath = filepath.Dir(os.Args[1])
 		//pwd, _ := os.Getwd()
-		if fileInfo, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
-			if file, err := os.OpenFile(myState.filePath+"/"+myState.fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
+		if fileInfo, existsErr := os.Stat(filePath + "/" + fileName); !os.IsNotExist(existsErr) {
+			if file, err := os.OpenFile(filePath+"/"+fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
 				// Found the file, lets load it after
 				return file, nil
 
@@ -530,7 +529,6 @@ func handleArguments(args []string) (*File, error) {
 			return nil, &WinterError{"New file.", true}
 		}
 	default:
-		myState.fileName = ""
 		return nil, &WinterError{"Argument Error.", false}
 	}
 }
@@ -559,12 +557,12 @@ func main() {
 	file, err := handleArguments(os.Args)
 	if err == nil {
 		/* Init the ScreenBuffer */
-		sb = screenbuf.NewScreenBuffer(file, myState.filePath)
+		sb = screenbuf.NewScreenBuffer(file)
 		sb.LoadFile()
 	} else {
 		// If the file doesn't exist or if something went wrong
 		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile() {
-			sb = screenbuf.NewScreenBuffer(nil, myState.filePath)
+			sb = screenbuf.NewScreenBuffer(nil)
 			sb.LoadFile()
 		} else {
 			fmt.Print("-winter: ")
@@ -630,7 +628,7 @@ func main() {
 					//easyterm.CursorNextLine(1)
 					//updateCursorPosY(1)
 					var oldLineIndex int = myState.currentLine.Index
-					sb.AddLineToBuffer(myState.currentLine.Index, myState.cursorPos.x)
+					sb.AddLineToBuffer(myState.currentLine.Index, myState.cursorPos.x, myState.cursorPos.y)
 					//myState.currentLine = sb.GetLine(newIndex)
 					sb.Dirty = true
 					if myState.cursorPos.y < sb.DefaultHeight {
