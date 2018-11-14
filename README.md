@@ -20,6 +20,8 @@ Features yet to implement are:
 
 Things I need to refactor:
 
-* The save logic.
+* Remove commented code
+* Add meaningful comments to packages
+* Eliminate vendor packages by hosting them here
 
 Kindly submit any issue you find and I will eventually fix it. Happy hunting and bundle up.
