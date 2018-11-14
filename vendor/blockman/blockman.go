@@ -3,8 +3,9 @@ package blockman
 import (
 	"bufio"
 	"bytes"
-	"os"
 	"fmt"
+	"os"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -19,16 +20,17 @@ type BlockManager interface {
 }
 
 type BlockMan struct {
-	file *File
-	blockSize int
+	File                     *File
+	blockSize                int
 	ammountReadInLoadedBlock int
-	loadedBlock []byte
-	realBlockSize int // in bytes
-	workingBuffer *Buffer
-	TotalBytesRead int64
-	writingBuffer *Buffer
-	totalBytesWritten int64
+	loadedBlock              []byte
+	realBlockSize            int // in bytes
+	workingBuffer            *Buffer
+	TotalBytesRead           int64
+	writingBuffer            *Buffer
+	totalBytesWritten        int64
 }
+
 /* Custom Errors */
 type BlockManError struct {
 	message string
@@ -50,13 +52,13 @@ func (e *BlockManError) HasFile() bool {
 
 /* "Constructor" */
 
-func NewBlockMan(file *File) (*BlockMan) {
+func NewBlockMan(file *File) *BlockMan {
 	var bm = &BlockMan{}
 	bm.blockSize = os.Getpagesize() //100
 	if file != nil {
-		bm.file = file
+		bm.File = file
 	} else {
-		bm.file = nil
+		bm.File = nil
 	}
 	bm.ammountReadInLoadedBlock = 0
 	bm.loadedBlock = nil
@@ -73,17 +75,17 @@ func (bm *BlockMan) Read() ([]byte, error) {
 		return nil, &BlockManError{"BlockMan object is nil.", false}
 	}
 
-	if bm.file == nil {
+	if bm.File == nil {
 		return nil, &BlockManError{"No file in Block Manager.", false}
 	}
 
 	var (
 		line []byte
-		err error
+		err  error
 	)
 
 	if bm.loadedBlock == nil {
-		err = loadBlock(bm);
+		err = loadBlock(bm)
 		// All good, block should be in bm.loadedBlock
 		// Lets read from it
 		if err == nil {
@@ -124,7 +126,7 @@ func (bm *BlockMan) Write(p []byte) (int, error) {
 		return n, nil
 	} else {
 		// We have a remainder only write part of if
-		s, serr := bm.getFileSize();
+		s, serr := bm.getFileSize()
 		// Error getting the file size
 		if serr != nil {
 			return 0, serr
@@ -134,26 +136,26 @@ func (bm *BlockMan) Write(p []byte) (int, error) {
 			derr error
 		)
 		if (bm.totalBytesWritten + int64(os.Getpagesize())) <= s {
-			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
-			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+			data, derr = unix.Mmap(int(bm.File.Fd()), bm.totalBytesWritten, os.Getpagesize(),
+				unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 		} else {
 			// file needs to grow via ftruncate
-			unix.Ftruncate(int(bm.file.Fd()), (s + int64(bm.writingBuffer.Len())))
+			unix.Ftruncate(int(bm.File.Fd()), int64(bm.writingBuffer.Len()))
 
-			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
-			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+			data, derr = unix.Mmap(int(bm.File.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
+				unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 		}
 
 		if derr == nil {
-			
+
 			n := copy(data, bm.writingBuffer.Bytes()[:])
 			// Sum what was written with what is remaining that will be flushed next
 			bm.totalBytesWritten += int64(n)
 			// underlying []byte will be emptied
 			bm.writingBuffer.Reset()
 			// write remainder
-			unix.Msync(data, unix.MS_ASYNC | unix.MS_INVALIDATE)
-			unix.Munmap(data) // Close mmap
+			unix.Msync(data, unix.MS_ASYNC|unix.MS_INVALIDATE)
+			unix.Munmap(data)         // Close mmap
 			bm.writingBuffer.Write(p) // write remainder
 			return n, nil
 		}
@@ -164,15 +166,15 @@ func (bm *BlockMan) Write(p []byte) (int, error) {
 func (bm *BlockMan) Flush() error {
 
 	if bm.writingBuffer == nil {
-		if bm.file != nil {
+		if bm.File != nil {
 			return &BlockManError{"Nothing to Flush.", false}
 		} else {
 			return &BlockManError{"Nothing to Flush.", true}
 		}
 	}
 
-	s, serr := bm.getFileSize();
-		// Error getting the file size
+	s, serr := bm.getFileSize()
+	// Error getting the file size
 	if serr != nil {
 		return serr
 	}
@@ -183,21 +185,21 @@ func (bm *BlockMan) Flush() error {
 	if bm.writingBuffer.Len() > 0 {
 
 		if (bm.totalBytesWritten + int64(os.Getpagesize())) <= s {
-			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, os.Getpagesize(),
-			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED);
+			data, derr = unix.Mmap(int(bm.File.Fd()), bm.totalBytesWritten, os.Getpagesize(),
+				unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 		} else {
 			// file needs to grow via ftruncate
-			unix.Ftruncate(int(bm.file.Fd()), (s + int64(bm.writingBuffer.Len())))
+			unix.Ftruncate(int(bm.File.Fd()), int64(bm.writingBuffer.Len()))
 
-			data, derr = unix.Mmap(int(bm.file.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
-			unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+			data, derr = unix.Mmap(int(bm.File.Fd()), bm.totalBytesWritten, bm.writingBuffer.Len(),
+				unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 		}
 
 		if derr == nil {
 			copy(data, bm.writingBuffer.Bytes()[:])
 			bm.totalBytesWritten = 0
 			bm.writingBuffer.Reset()
-			unix.Msync(data, unix.MS_ASYNC | unix.MS_INVALIDATE)
+			unix.Msync(data, unix.MS_ASYNC|unix.MS_INVALIDATE)
 			unix.Munmap(data) // Close mmap
 			return nil
 		}
@@ -224,11 +226,11 @@ func loadBlock(bm *BlockMan) error {
 	)
 
 	if (bm.TotalBytesRead + int64(os.Getpagesize())) <= s {
-		data, derr = unix.Mmap(int(bm.file.Fd()), bm.TotalBytesRead, os.Getpagesize(),
-		unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+		data, derr = unix.Mmap(int(bm.File.Fd()), bm.TotalBytesRead, os.Getpagesize(),
+			unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	} else {
-		data, derr = unix.Mmap(int(bm.file.Fd()), bm.TotalBytesRead, int(s - bm.TotalBytesRead),
-		unix.PROT_READ | unix.PROT_WRITE, unix.MAP_SHARED)
+		data, derr = unix.Mmap(int(bm.File.Fd()), bm.TotalBytesRead, int(s-bm.TotalBytesRead),
+			unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	}
 
 	if derr == nil {
@@ -259,12 +261,12 @@ func readHelper(bm *BlockMan) ([]byte, error) {
 }
 
 func close(bm *BlockMan) {
-	unix.Msync(bm.loadedBlock, unix.MS_ASYNC | unix.MS_INVALIDATE)
+	unix.Msync(bm.loadedBlock, unix.MS_ASYNC|unix.MS_INVALIDATE)
 	unix.Munmap(bm.loadedBlock)
 }
 
 func (bm *BlockMan) getFileSize() (int64, error) {
-	stat, err := bm.file.Stat()
+	stat, err := bm.File.Stat()
 	if err == nil {
 		return stat.Size(), nil
 	}
