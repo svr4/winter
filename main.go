@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"screenbuf"
 	"strings"
 )
@@ -499,7 +500,7 @@ func unpackTabs(line string) string {
 }
 
 func saveFile() {
-	sb.Save(myState.fileName, myState.filePath)
+	sb.Save()
 	easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 }
 
@@ -510,16 +511,11 @@ func handleArguments(args []string) (*File, error) {
 
 	case 1:
 		myState.fileName = ""
-		myState.filePath = "./"
+		myState.filePath = "."
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
-		fnArr := strings.Split(os.Args[1], "/")
-		myState.fileName = fnArr[len(fnArr)-1]
-		if len(fnArr) > 1 {
-			myState.filePath = strings.Join(fnArr[0:len(fnArr)-1], "/")
-		} else {
-			myState.filePath = "./"
-		}
+		myState.fileName = filepath.Base(os.Args[1])
+		myState.filePath = filepath.Dir(os.Args[1])
 		//pwd, _ := os.Getwd()
 		if fileInfo, existsErr := os.Stat(myState.filePath + "/" + myState.fileName); !os.IsNotExist(existsErr) {
 			if file, err := os.OpenFile(myState.filePath+"/"+myState.fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
@@ -563,12 +559,12 @@ func main() {
 	file, err := handleArguments(os.Args)
 	if err == nil {
 		/* Init the ScreenBuffer */
-		sb = screenbuf.NewScreenBuffer(file)
+		sb = screenbuf.NewScreenBuffer(file, myState.filePath)
 		sb.LoadFile()
 	} else {
 		// If the file doesn't exist or if something went wrong
 		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile() {
-			sb = screenbuf.NewScreenBuffer(nil)
+			sb = screenbuf.NewScreenBuffer(nil, myState.filePath)
 			sb.LoadFile()
 		} else {
 			fmt.Print("-winter: ")

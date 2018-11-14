@@ -54,15 +54,19 @@ type ScreenBuffer struct {
 	TabStops                []int
 	isNewFile               bool
 	Dirty                   bool
+	FilePath                string
+	FileName                string
 }
 
-func NewScreenBuffer(file *File) *ScreenBuffer {
+func NewScreenBuffer(file *File, path string) *ScreenBuffer {
 	var sb = &ScreenBuffer{}
 	sb.Length = 0
 	sb.Dirty = false
+	sb.FilePath = path
 
 	if file != nil {
 		sb.FilePtr = file
+		sb.FileName = file.Name()
 		sb.isNewFile = false
 		// Set the max size in bytes to a third of the size of the file or OS page size
 		if fileInfo, errr := sb.FilePtr.Stat(); errr == nil && fileInfo.Size() > 0 {
@@ -83,6 +87,7 @@ func NewScreenBuffer(file *File) *ScreenBuffer {
 	} else {
 		sb.isNewFile = true
 		sb.FilePtr = nil
+		sb.FileName = ""
 		sb.MaxSizeInBytes = int64(os.Getpagesize())
 	}
 
@@ -565,21 +570,18 @@ func (sb *ScreenBuffer) UnpackTabs(line string) string {
 
 }
 
-func (sb *ScreenBuffer) Save(editorFileName, path string) {
+func (sb *ScreenBuffer) Save() {
 
 	if sb.isNewFile && sb.Dirty {
 		// Read console to get filename
 		// Just write whole buffer into file
 		// Save into current working dir
 		//easyterm.StartReadMultiCharInput()
-		var fileName string
-		if editorFileName == "" {
-			fileName = handleSavePrompt(sb)
-		} else {
-			fileName = editorFileName
+		if sb.FileName == "" {
+			sb.FileName = handleSavePrompt(sb)
 		}
-		if len(fileName) > 0 {
-			if newFile, err := os.OpenFile(path+"/"+fileName, os.O_WRONLY|os.O_CREATE, 0666); err == nil {
+		if len(sb.FileName) > 0 {
+			if newFile, err := os.OpenFile(sb.FilePath+"/"+sb.FileName, os.O_RDWR|os.O_CREATE, 0666); err == nil {
 				fw := bufio.NewWriter(newFile)
 				var bytesWritten int = 0
 				var line string
@@ -592,11 +594,12 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 					bytesWritten += bw
 					fw.Flush()
 				}
-				newFile.Close()
 				sb.Dirty = false
 				sb.isNewFile = false
+				sb.FilePtr = newFile
+				sb.Blockman.File = newFile
 				easyterm.CursorPos(sb.DefaultHeight, 1)
-				fmt.Printf("Saved file: %v. Bytes Written: %v", path+"/"+fileName, bytesWritten)
+				fmt.Printf("Saved file: \"%v\". Bytes Written: %v", sb.FilePath+"/"+sb.FileName, bytesWritten)
 			}
 		}
 	} else if sb.Dirty {
@@ -625,7 +628,7 @@ func (sb *ScreenBuffer) Save(editorFileName, path string) {
 		sb.Blockman.Flush()
 		sb.Dirty = false
 		easyterm.CursorPos(sb.DefaultHeight, 1)
-		fmt.Printf("Saved file: %v. Bytes Written: %v", path+"/"+editorFileName, bytesWritten)
+		fmt.Printf("Saved file: \"%v\". Bytes Written: %v", sb.FilePath+"/"+sb.FileName, bytesWritten)
 	}
 }
 
