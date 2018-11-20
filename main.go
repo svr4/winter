@@ -32,7 +32,8 @@ type Cursor struct {
 type WinterState struct {
 	cursorPos   Cursor
 	currentLine *BufferNode
-	//filePtr *File
+	fileName string
+	filePath string
 }
 
 type WinterError struct {
@@ -90,8 +91,23 @@ func moveCursorX(num int, fn func(int)) {
 	line_length := myState.currentLine.Length
 	// Handling tab movement
 	if (myState.cursorPos.x - 1) < line_length {
+		if num < 0 {
+			if sb.IsATabStop(myState.cursorPos.x-1) {
+				if strings.ContainsRune(myState.currentLine.RealLine[0:myState.cursorPos.x-1], 9){
+					for i:= myState.cursorPos.x-1; i >= 0; i-- {
+						if myState.currentLine.RealLine[i] == '\t' {
+							num *= ((myState.cursorPos.x - i) - 1) // to land on the char before the stop
+							break
+						}
+					}
+				}
+			}
+		}
 		if myState.currentLine.RealLine[myState.cursorPos.x-1] == '\t' {
-			num *= 8 // Tab
+			if num > 0 {
+				var nextTab int = sb.NextTabStop(myState.cursorPos.x-1)
+				num *= (nextTab - myState.cursorPos.x) + 1 // Tab +1 to land on next editable char
+			}
 		}
 	}
 	// Current pos + the next column < the length of the line
@@ -242,57 +258,90 @@ func backspaceLine() {
 	// if eightBack < 0 {
 	// 	eightBack = 0
 	// }
-	var prevTabStop int = sb.PrevTabStop(myState.cursorPos.x - 1)
-	var backSpacePos int = myState.cursorPos.x
+	// var prevTabStop int = sb.PrevTabStop(myState.cursorPos.x - 1)
+	// var backSpacePos int = myState.cursorPos.x
 
-	if backSpacePos > myState.currentLine.Length && (myState.currentLine.Length > 0) {
-		backSpacePos -= 2
-	} else {
-		backSpacePos -= 1
-	}
+	// if backSpacePos > myState.currentLine.Length && (myState.currentLine.Length > 0) {
+	// 	backSpacePos -= 2
+	// } else {
+	// 	backSpacePos -= 1
+	// }
 
-	if strings.ContainsRune(myState.currentLine.RealLine[prevTabStop:backSpacePos], 9) {
-		var spacesBack int = 0
-		for i := myState.cursorPos.x - 1; i >= prevTabStop; i-- {
-			if myState.currentLine.RealLine[i] == '\t' {
-				var total []rune
-				var firstHalf []rune
-				if i == 0 {
-					firstHalf = make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
-					copy(firstHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
+	// if strings.ContainsRune(myState.currentLine.RealLine[prevTabStop:backSpacePos], 9) {
+	// 	var spacesBack int = 0
+	// 	var total []rune
+	// 	var firstHalf []rune
+	// 	var indexToDelete int = myState.cursorPos.x - 2
 
-					total = firstHalf
+	// 	for i := myState.currentLine.Length - 1; i >= prevTabStop; i-- {
+	// 		if myState.currentLine.RealLine[i] == '\t' {
 
-				} else if i > 0 {
-					firstHalf = make([]rune, len(myState.currentLine.RealLine[0:i]))
-					copy(firstHalf, []rune(myState.currentLine.RealLine[0:i]))
+	// 			if i == 0 {
+	// 				firstHalf = make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+	// 				copy(firstHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
-					secondHalf := make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
-					copy(secondHalf, []rune(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+	// 				total = firstHalf
 
-					total = make([]rune, (len(firstHalf) + len(secondHalf)))
-					copy(total, []rune(string(firstHalf)+string(secondHalf)))
-				}
+	// 			} else if i > 0 {
+	// 				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:i]))
+	// 				copy(firstHalf, []rune(myState.currentLine.RealLine[0:i]))
 
-				myState.currentLine.Line = unpackTabs(string(total))
-				myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
-				myState.currentLine.Length = len(myState.currentLine.RealLine)
+	// 				secondHalf := make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+	// 				copy(secondHalf, []rune(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
 
-				easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-				easyterm.ClearLine()
-				easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
-				fmt.Print(myState.currentLine.Line)        // write updated line again
-				easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+	// 				total = make([]rune, (len(firstHalf) + len(secondHalf)))
+	// 				copy(total, []rune(string(firstHalf)+string(secondHalf)))
+	// 			}
 
-				easyterm.CursorLeft(spacesBack)
-				updateCursorPosX(-1 * (spacesBack))
+	// 			myState.currentLine.Line = unpackTabs(string(total))
+	// 			myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
+	// 			myState.currentLine.Length = len(myState.currentLine.RealLine)
 
-				return
-			}
-			spacesBack++ // the amount of spaces to move cursor back if necesary
-		}
+	// 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+	// 			easyterm.ClearLine()
+	// 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+	// 			fmt.Print(myState.currentLine.Line)        // write updated line again
+	// 			easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 
-	}
+	// 			easyterm.CursorLeft(spacesBack)
+	// 			updateCursorPosX(-1 * (spacesBack))
+
+	// 			return
+	// 		} else {
+	// 			if i == 0 {
+	// 				firstHalf = make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+	// 				copy(firstHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
+
+	// 				total = firstHalf
+
+	// 			} else if i > 0 {
+	// 				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:i]))
+	// 				copy(firstHalf, []rune(myState.currentLine.RealLine[0:i]))
+
+	// 				secondHalf := make([]rune, len(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+	// 				copy(secondHalf, []rune(myState.currentLine.RealLine[backSpacePos:myState.currentLine.Length]))
+
+	// 				total = make([]rune, (len(firstHalf) + len(secondHalf)))
+	// 				copy(total, []rune(string(firstHalf)+string(secondHalf)))
+	// 			}
+
+	// 			myState.currentLine.Line = unpackTabs(string(total))
+	// 			myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
+	// 			myState.currentLine.Length = len(myState.currentLine.RealLine)
+
+	// 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+	// 			easyterm.ClearLine()
+	// 			easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
+	// 			fmt.Print(myState.currentLine.Line)        // write updated line again
+	// 			easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
+
+	// 			easyterm.CursorLeft(1)
+	// 			updateCursorPosX(-1)
+	// 		}
+	// 		spacesBack++ // the amount of spaces to move cursor back if necesary
+	// 	}
+
+	// }
 
 	/*var tabPos int = (sb.PrevTabStop(myState.cursorPos.x - 1) - 1)
 	if tabPos >= 0 && tabPos < myState.currentLine.Length {
@@ -390,9 +439,38 @@ func backspaceLine() {
 	// Between the first and last characters of a line
 	case myState.cursorPos.x > 1 && myState.cursorPos.x < (myState.currentLine.Length+1):
 
-		total := make([]rune, myState.currentLine.Length-1)
-		firstHalf := make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
-		copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+		var firstHalf []rune
+		var total []rune
+		var pos int = myState.cursorPos.x - 1
+		var moveCursor int = 0
+
+		if sb.IsATabStop(pos) {
+
+			if strings.ContainsRune(myState.currentLine.RealLine[0:pos], 9){
+				for i:= pos; i >= 0; i-- {
+					if myState.currentLine.RealLine[i] == '\t' {
+						pos = (pos - i) // to land on the char before the stop
+						break
+					}
+				}
+				total = make([]rune, myState.currentLine.Length-pos)
+				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:pos-2]))
+				copy(firstHalf, []rune(myState.currentLine.RealLine[0:pos-2]))
+				moveCursor = pos
+			} else {
+				total = make([]rune, myState.currentLine.Length-1)
+				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+				copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+				moveCursor = 1
+			}
+			
+		} else {
+			total = make([]rune, myState.currentLine.Length-1)
+			firstHalf = make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+			copy(firstHalf, []rune(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
+			moveCursor = 1
+		}
+		
 		secondHalf := make([]rune, len(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 		copy(secondHalf, []rune(myState.currentLine.RealLine[myState.cursorPos.x-1:myState.currentLine.Length]))
 
@@ -408,8 +486,8 @@ func backspaceLine() {
 		fmt.Print(myState.currentLine.Line)        // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
-		easyterm.CursorLeft(1)
-		updateCursorPosX(-1)
+		easyterm.CursorLeft(moveCursor)
+		updateCursorPosX(-1 * moveCursor)
 
 	// At the start of a line
 	case myState.cursorPos.x == 1:
@@ -429,7 +507,7 @@ func backspaceLine() {
 			copy(currentText, []rune(myState.currentLine.RealLine))
 			prev.Line += unpackTabs(string(currentText))
 			prev.RealLine = packTabs(prev.Line)
-			prev.Length = len(prev.Line)
+			prev.Length = len(prev.RealLine)
 
 			// rehook list, sans the soon to be destroyed node and update currentLine state
 			var next *BufferNode
@@ -470,11 +548,38 @@ func backspaceLine() {
 		// At the very end of a line
 	case myState.cursorPos.x == (myState.currentLine.Length + 1):
 
-		newLine := make([]rune, myState.currentLine.Length-1)
-		copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-1]))
+		var newLine []rune
+		var pos int = myState.cursorPos.x - 1
+		var moveCursor int = 0
+
+		if sb.IsATabStop(pos) {
+
+			if strings.ContainsRune(myState.currentLine.RealLine[0:pos], 9){
+				for i:= pos - 1; i >= 0; i-- {
+					if myState.currentLine.RealLine[i] == '\t' {
+						pos = (pos - i) // to land on the char before the stop
+						break
+					}
+				}
+				moveCursor = pos
+				newLine = make([]rune, myState.currentLine.Length-pos)
+				copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-pos]))
+			} else {
+				moveCursor = 1
+				newLine = make([]rune, myState.currentLine.Length-1)
+				copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-1]))
+			}
+		} else {
+			moveCursor = 1
+			newLine = make([]rune, myState.currentLine.Length-1)
+			copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-1]))
+		}
+
+		//newLine := make([]rune, myState.currentLine.Length-1)
+		//copy(newLine, []rune(myState.currentLine.RealLine[0:myState.currentLine.Length-1]))
 		myState.currentLine.Line = unpackTabs(string(newLine))
 		myState.currentLine.RealLine = packTabs(myState.currentLine.Line)
-		myState.currentLine.Length = len(myState.currentLine.Line)
+		myState.currentLine.Length = len(myState.currentLine.RealLine)
 
 		// reprint line
 		easyterm.CursorPos(myState.cursorPos.y, 1) // move cursor to start
@@ -483,8 +588,8 @@ func backspaceLine() {
 		fmt.Print(myState.currentLine.Line)        // write updated line again
 		easyterm.CursorPos(myState.cursorPos.y, myState.cursorPos.x)
 		// move & update cursor
-		easyterm.CursorLeft(1)
-		updateCursorPosX(-1)
+		easyterm.CursorLeft(moveCursor)
+		updateCursorPosX(-1 * moveCursor)
 	}
 	showEditorData()
 }
@@ -511,10 +616,14 @@ func handleArguments(args []string) (*File, error) {
 	switch len(args) {
 
 	case 1:
+		myState.fileName = ""
+		myState.filePath = "."
 		return nil, &WinterError{"No file name entered.", true}
 	case 2:
 		fileName = filepath.Base(os.Args[1])
 		filePath = filepath.Dir(os.Args[1])
+		myState.fileName = fileName
+		myState.filePath = filePath
 		//pwd, _ := os.Getwd()
 		if fileInfo, existsErr := os.Stat(filePath + "/" + fileName); !os.IsNotExist(existsErr) {
 			if file, err := os.OpenFile(filePath+"/"+fileName, os.O_RDWR, fileInfo.Mode()); err == nil {
@@ -563,6 +672,8 @@ func main() {
 		// If the file doesn't exist or if something went wrong
 		if nwerr, ok := err.(*WinterError); ok && nwerr.IsNewFile() {
 			sb = screenbuf.NewScreenBuffer(nil)
+			sb.FileName = myState.fileName
+			sb.FilePath = myState.filePath
 			sb.LoadFile()
 		} else {
 			fmt.Print("-winter: ")
