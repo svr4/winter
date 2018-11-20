@@ -93,8 +93,8 @@ func moveCursorX(num int, fn func(int)) {
 	if (myState.cursorPos.x - 1) < line_length {
 		if num < 0 {
 			if sb.IsATabStop(myState.cursorPos.x-1) {
-				if strings.ContainsRune(myState.currentLine.RealLine[0:myState.cursorPos.x-1], 9){
-					for i:= myState.cursorPos.x-1; i >= 0; i-- {
+				if strings.ContainsRune(myState.currentLine.RealLine[sb.PrevTabStop(myState.cursorPos.x-1):myState.cursorPos.x-1], 9){
+					for i:= myState.cursorPos.x-2; i >= 0; i-- {
 						if myState.currentLine.RealLine[i] == '\t' {
 							num *= ((myState.cursorPos.x - i) - 1) // to land on the char before the stop
 							break
@@ -445,18 +445,25 @@ func backspaceLine() {
 		var moveCursor int = 0
 
 		if sb.IsATabStop(pos) {
-
-			if strings.ContainsRune(myState.currentLine.RealLine[0:pos], 9){
-				for i:= pos; i >= 0; i-- {
+			// if it's a tab stop then go from that tabstop to the prev one and check if
+			// there are any tabs to remove
+			if strings.ContainsRune(myState.currentLine.RealLine[sb.PrevTabStop(pos):pos], 9){
+				for i:= pos-1; i >= 0; i-- {
 					if myState.currentLine.RealLine[i] == '\t' {
+						// tab at the beginning
+						if i == 0 {
+							moveCursor = pos
+							pos = 0
+							break	
+						}
 						pos = (pos - i) // to land on the char before the stop
+						moveCursor = pos
 						break
 					}
 				}
 				total = make([]rune, myState.currentLine.Length-pos)
-				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:pos-2]))
-				copy(firstHalf, []rune(myState.currentLine.RealLine[0:pos-2]))
-				moveCursor = pos
+				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:pos]))
+				copy(firstHalf, []rune(myState.currentLine.RealLine[0:pos]))
 			} else {
 				total = make([]rune, myState.currentLine.Length-1)
 				firstHalf = make([]rune, len(myState.currentLine.RealLine[0:myState.cursorPos.x-2]))
@@ -554,7 +561,7 @@ func backspaceLine() {
 
 		if sb.IsATabStop(pos) {
 
-			if strings.ContainsRune(myState.currentLine.RealLine[0:pos], 9){
+			if strings.ContainsRune(myState.currentLine.RealLine[sb.PrevTabStop(pos):pos], 9){
 				for i:= pos - 1; i >= 0; i-- {
 					if myState.currentLine.RealLine[i] == '\t' {
 						pos = (pos - i) // to land on the char before the stop
