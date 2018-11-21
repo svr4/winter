@@ -16,7 +16,8 @@ Winter is a text editor written in Go inspired by [Antirez](https://github.com/a
 Features yet to implement are:
 
 * Handling signals
-* Handling large multi-line single lines.
+* Handling large multi-line single lines
+* Handling terminal resize
 
 Things I need to refactor:
 
